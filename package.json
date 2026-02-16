@@ -46,7 +46,7 @@
           ]
         }
       ],
-      "publish": "never"
+      
     },
     "linux": {
       "target": "AppImage"
