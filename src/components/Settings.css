@@ -1,0 +1,147 @@
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.settings-modal {
+  max-width: 600px;
+}
+
+.checkbox-label {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+.checkbox-label span {
+  font-size: 14px;
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.update-group {
+  margin-bottom: 0 !important;
+}
+
+.update-info {
+  margin-bottom: 16px;
+  padding: 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.version-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.version-label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.version-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.update-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 12px;
+}
+
+.update-status.checking {
+  background: rgba(255, 193, 7, 0.1);
+  color: #ffc107;
+  border: 1px solid rgba(255, 193, 7, 0.2);
+}
+
+.update-status.latest {
+  background: rgba(76, 175, 80, 0.1);
+  color: #4caf50;
+  border: 1px solid rgba(76, 175, 80, 0.2);
+}
+
+.update-status.available {
+  background: rgba(33, 150, 243, 0.1);
+  color: #2196f3;
+  border: 1px solid rgba(33, 150, 243, 0.2);
+  margin-bottom: 12px;
+}
+
+.update-status.error {
+  background: rgba(244, 67, 54, 0.1);
+  color: #f44336;
+  border: 1px solid rgba(244, 67, 54, 0.2);
+}
+
+.update-available {
+  display: flex;
+  flex-direction: column;
+}
+
+.btn-download {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: #2196f3;
+  border: none;
+  border-radius: var(--radius-md);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-download:hover {
+  background: #1976d2;
+  transform: translateY(-2px);
+}
+
+.btn-check {
+  width: 100%;
+  padding: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: 18px;
+  transition: all var(--transition-fast);
+}
+
+.btn-check:hover:not(:disabled) {
+  background: var(--hover);
+  border-color: var(--muted);
+  transform: translateY(-2px);
+}
+
+.btn-check:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

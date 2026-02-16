@@ -1,32 +1,29 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { HiPlus, HiX } from 'react-icons/hi';
+import { HiPlus, HiX, HiCog } from 'react-icons/hi';
 import './Sidebar.css';
 
-function Sidebar({ streams, activeStreamId, onStreamSelect, onStreamRemove, onAddStream }) {
+function Sidebar({ streams, activeStreamId, onStreamSelect, onStreamRemove, onAddStream, onOpenSettings }) {
   const [onlineStreams, setOnlineStreams] = useState({});
 
   useEffect(() => {
     const checkStatuses = async () => {
       const statuses = {};
-      const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       
       await Promise.all(
         streams.map(async (stream) => {
           try {
-            const checkUrl = isDev 
-              ? `/live-check/${stream.key}.m3u8` 
-              : `https://stream.nnfz.ru/live/${stream.key}.m3u8`;
-
-            const response = await fetch(checkUrl, { 
+            const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const serverUrl = localStorage.getItem('serverUrl') || 'https://stream.nnfz.ru';
+            const checkUrl = isDev
+              ? `/live-check/${stream.key}.m3u8`
+              : `${serverUrl}/live/${stream.key}.m3u8`;
+            const response = await fetch(checkUrl, {
               method: 'GET',
               cache: 'no-cache',
-              headers: {
-                'Range': 'bytes=0-0'
-              }
+              headers: { 'Range': 'bytes=0-0' }
             });
-            
-            statuses[stream.id] = response.ok || response.status === 206;
+            statuses[stream.id] = response.status !== 404;
           } catch (e) {
             statuses[stream.id] = false;
           }
@@ -40,6 +37,8 @@ function Sidebar({ streams, activeStreamId, onStreamSelect, onStreamRemove, onAd
     return () => clearInterval(interval);
   }, [streams]);
 
+  // Убрана строка if (hidden) return null — видимостью управляет App.jsx
+
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
@@ -47,6 +46,9 @@ function Sidebar({ streams, activeStreamId, onStreamSelect, onStreamRemove, onAd
           <span className="logo-text">Stretch</span>
           <span className="logo-subtext">v{import.meta.env.APP_VERSION}</span>
         </div>
+        <button className="settings-btn" onClick={onOpenSettings}>
+          <HiCog className="settings-icon" />
+        </button>
       </div>
 
       <div className="streams-list">
@@ -62,12 +64,10 @@ function Sidebar({ streams, activeStreamId, onStreamSelect, onStreamRemove, onAd
             <div className="stream-status">
               {onlineStreams[stream.id] && <div className="live-dot" title="В эфире" />}
             </div>
-            
             <div className="stream-info">
               <div className="stream-name">{stream.name}</div>
               <div className="stream-key mono">{stream.key}</div>
             </div>
-            
             <button 
               className="remove-btn"
               onClick={(e) => {

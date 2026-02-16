@@ -40,7 +40,7 @@
       "icon": "src/icon/icon.png",
       "target": [
         {
-          "target": "portable",
+          "target": "nsis",
           "arch": ["x64"]
         }
       ]

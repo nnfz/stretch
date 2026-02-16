@@ -12,6 +12,9 @@
 .sidebar-header {
   padding: 20px;
   border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .logo {
@@ -166,5 +169,28 @@
 }
 
 .add-icon {
+  font-size: 20px;
+}
+
+.settings-btn {
+  padding: 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.settings-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--hover);
+  transform: translateY(-2px);
+}
+
+.settings-icon {
   font-size: 20px;
 }

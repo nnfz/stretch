@@ -1,10 +1,14 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import TitleBar from './components/TitleBar';
 import Sidebar from './components/Sidebar';
 import Player from './components/Player';
 import AddStreamModal from './components/AddStreamModal';
+import Settings from './components/Settings';
+import useUpdateChecker from './hooks/useUpdateChecker';
 import './App.css';
+
+const SIDEBAR_BREAKPOINT = 1030;
 
 function App() {
   const [streams, setStreams] = useState(() => {
@@ -18,7 +22,39 @@ function App() {
   });
   
   const [showAddModal, setShowAddModal] = useState(false);
-  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const [isSidebarVisible, setIsSidebarVisible] = useState(() => {
+    return window.innerWidth >= SIDEBAR_BREAKPOINT;
+  });
+  // Храним, скрыл ли пользователь сайдбар вручную
+  const [manuallyHidden, setManuallyHidden] = useState(false);
+
+  const { hasUpdate, updateInfo } = useUpdateChecker();
+
+  // Следим за размером окна
+  useEffect(() => {
+    let prevWidth = window.innerWidth;
+
+    const handleResize = () => {
+      const currentWidth = window.innerWidth;
+
+      if (currentWidth < SIDEBAR_BREAKPOINT) {
+        // Окно стало узким — прячем сайдбар
+        setIsSidebarVisible(false);
+      } else if (prevWidth < SIDEBAR_BREAKPOINT && currentWidth >= SIDEBAR_BREAKPOINT) {
+        // Окно стало широким (пересекли порог снизу вверх)
+        // Показываем только если пользователь не скрывал вручную
+        if (!manuallyHidden) {
+          setIsSidebarVisible(true);
+        }
+      }
+
+      prevWidth = currentWidth;
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [manuallyHidden]);
 
   const saveStreams = useCallback((newStreams) => {
     setStreams(newStreams);
@@ -59,7 +95,18 @@ function App() {
   }, []);
 
   const toggleSidebar = useCallback(() => {
-    setIsSidebarVisible(prev => !prev);
+    setIsSidebarVisible(prev => {
+      const next = !prev;
+      // Если пользователь скрывает при широком окне — запоминаем
+      if (!next && window.innerWidth >= SIDEBAR_BREAKPOINT) {
+        setManuallyHidden(true);
+      }
+      // Если пользователь показывает — сбрасываем флаг
+      if (next) {
+        setManuallyHidden(false);
+      }
+      return next;
+    });
   }, []);
 
   const activeStream = streams.find(s => s.id === activeStreamId);
@@ -83,6 +130,7 @@ function App() {
                 onStreamSelect={setActive}
                 onStreamRemove={removeStream}
                 onAddStream={() => setShowAddModal(true)}
+                onOpenSettings={() => setShowSettings(true)}
               />
             </motion.div>
           )}
@@ -114,6 +162,31 @@ function App() {
           />
         )}
       </AnimatePresence>
+      <AnimatePresence>
+        {showSettings && (
+          <Settings onClose={() => setShowSettings(false)} />
+        )}
+      </AnimatePresence>
+      {hasUpdate && updateInfo && (
+        <motion.div 
+          className="update-notification"
+          initial={{ opacity: 0, y: 50 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 50 }}
+        >
+          <div className="update-content">
+            <span className="update-text">
+              Доступна новая версия v{updateInfo.version}
+            </span>
+            <button 
+              className="update-download-btn"
+              onClick={() => window.open(updateInfo.downloadUrl, '_blank')}
+            >
+              Скачать
+            </button>
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 }
