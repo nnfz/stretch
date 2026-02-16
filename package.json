@@ -1,14 +1,14 @@
 {
   "name": "stretch",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "hueta",
   "main": "main.js",
   "scripts": {
-      "dev": "concurrently \"npm run dev:react\" \"npm run dev:electron\"",
-      "dev:react": "vite",
-      "dev:electron": "wait-on http://localhost:5173 && node dev-electron.js",
-      "build": "vite build && electron-builder",
-      "build:win": "vite build && electron-builder --win --publish never"
+    "dev": "concurrently \"npm run dev:react\" \"npm run dev:electron\"",
+    "dev:react": "vite",
+    "dev:electron": "wait-on http://localhost:5173 && node dev-electron.js",
+    "build": "vite build && electron-builder",
+    "build:win": "vite build && electron-builder --win --publish never"
   },
   "dependencies": {
     "framer-motion": "^11.0.0",
@@ -24,7 +24,7 @@
     "vite": "^5.0.8",
     "wait-on": "^7.2.0"
   },
-" build": {
+  " build": {
     "appId": "com.stretch.player",
     "productName": "Stretch",
     "directories": {
