@@ -33,10 +33,17 @@
     "files": [
       "main.js",
       "preload.js",
-      "dist/**/*"
+      "dist/**/*",
+      "src/icon/icon.png"
     ],
     "win": {
-      "target": "nsis"
+      "icon": "src/icon/icon.png",
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
     },
     "linux": {
       "target": "AppImage"

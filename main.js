@@ -4,6 +4,11 @@ const path = require('path');
 let mainWindow;
 
 function createWindow() {
+  // Определяем путь к иконке для dev и prod
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'icon.png')
+    : path.join(__dirname, 'src', 'icon', 'icon.png');
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -12,6 +17,7 @@ function createWindow() {
     backgroundColor: '#0a0a0a',
     frame: false,
     titleBarStyle: 'hidden',
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
