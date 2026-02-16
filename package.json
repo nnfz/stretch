@@ -45,8 +45,7 @@
             "x64"
           ]
         }
-      ],
-      
+      ]
     },
     "linux": {
       "target": "AppImage"
