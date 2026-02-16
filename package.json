@@ -27,6 +27,7 @@
   "build": {
     "appId": "com.stretch.player",
     "productName": "Stretch",
+    "publish": "never",
     "directories": {
       "output": "dist"
     },
@@ -46,7 +47,6 @@
           ]
         }
       ]
-      ,"publish": []
     },
     "linux": {
       "target": "AppImage"
