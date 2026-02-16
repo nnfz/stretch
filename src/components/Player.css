@@ -181,13 +181,13 @@
 }
 
 .status-badge.live .status-dot {
-  background: var(--accent);
+  background: var(--red);
   animation: dotPulse 2s ease-in-out infinite;
 }
 
 @keyframes dotPulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--accent); }
-  50% { opacity: 0.5; box-shadow: 0 0 0 var(--accent); }
+  0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--red); }
+  50% { opacity: 0.5; box-shadow: 0 0 0 var(--red); }
 }
 
 .stream-stats { display: flex; align-items: center; gap: 16px; }
