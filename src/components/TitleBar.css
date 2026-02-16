@@ -1,0 +1,95 @@
+.titlebar {
+  --height : 2.5rem;
+  height: var(--height);
+  background: var(--titlebg);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  -webkit-app-region: drag;
+  user-select: none;
+  z-index: 10001;
+  position: relative;
+}
+
+.titlebar-left {
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  gap: 12px;
+  -webkit-app-region: no-drag;
+  position: relative;
+  z-index: 10002;
+}
+
+.sidebar-toggle-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
+}
+
+.sidebar-toggle-btn:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.titlebar-drag-region {
+  position: absolute;
+  inset: 0;
+  -webkit-app-region: drag;
+  pointer-events: none;
+  z-index: 10000;
+}
+
+.app-name {
+  font-size: 0.8rem;
+  font-weight: 300;
+  color: var(--muted);
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-controls {
+  display: flex;
+  gap: 0;
+  margin-left: auto;
+  -webkit-app-region: no-drag;
+  position: relative;
+  z-index: 10002;
+}
+
+.titlebar-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  color: var(--muted);
+  pointer-events: auto;
+  width: 2.5rem;
+  height: var(--height);
+  font-size: 1rem;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-button:hover {
+  background: var(--hover) !important;
+  color: var(--fg);
+}
+
+.titlebar-button.win-close:hover {
+  background: var(--red) !important;
+  color: var(--fg);
+}
