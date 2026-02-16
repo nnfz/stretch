@@ -45,7 +45,7 @@ function Sidebar({ streams, activeStreamId, onStreamSelect, onStreamRemove, onAd
       <div className="sidebar-header">
         <div className="logo">
           <span className="logo-text">Stretch</span>
-          <span className="logo-subtext">v0.1.0</span>
+          <span className="logo-subtext">v{import.meta.env.APP_VERSION}</span>
         </div>
       </div>
 
