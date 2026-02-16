@@ -1,6 +1,6 @@
 {
   "name": "stretch",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Fast WebRTC Stream Player",
   "main": "main.js",
   "scripts": {
