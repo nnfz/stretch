@@ -57,7 +57,8 @@
       "createStartMenuShortcut": true,
       "installerIcon": "src/icon/icon.ico",
       "uninstallerIcon": "src/icon/icon.ico",
-      "installerHeaderIcon": "src/icon/icon.ico"
+      "installerHeaderIcon": "src/icon/icon.ico",
+      "allowElevation": true
     }
   }
 }
