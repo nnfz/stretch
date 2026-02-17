@@ -1,6 +1,6 @@
 [package]
 name = "stretch"
-version = "2.0.0"
+version = "2.0.1"
 description = "stretch"
 authors = ["nnfz"]
 edition = "2021"
