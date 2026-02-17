@@ -642,3 +642,36 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+.slider {
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              background 0.35s ease;
+}
+
+.fs-slider {
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              background 0.35s ease;
+}
+
+.slider.boosted,
+.fs-slider.boosted {
+  background: rgba(239, 68, 68, 0.3);
+}
+
+.slider.boosted::-webkit-slider-runnable-track,
+.fs-slider.boosted::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    to right,
+    var(--red) 0%,
+    var(--red) var(--slider-fill, 50%),
+    rgba(239, 68, 68, 0.25) var(--slider-fill, 50%),
+    rgba(239, 68, 68, 0.25) 100%
+  );
+}
+
+.slider.slider-active.boosted::-webkit-slider-thumb,
+.fs-slider.slider-active.boosted::-webkit-slider-thumb {
+  appearance: none !important;
+  width: 6px !important;
+  height: 18px !important;
+  background: var(--red);
+}

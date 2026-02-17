@@ -22,6 +22,45 @@ fn close_window(window: tauri::Window) {
 }
 
 #[tauri::command]
+async fn whep_request(url: String, sdp: String) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let response = client
+        .post(&url)
+        .header("Content-Type", "application/sdp")
+        .body(sdp)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !response.status().is_success() {
+        return Err(format!("WHEP вернул статус {}", response.status()));
+    }
+
+    response.text().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn check_stream_live(url: String) -> Result<bool, String> {
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let response = client
+        .get(&url)
+        .header("Range", "bytes=0-0")
+        .send()
+        .await
+        .map_err(|_| "fetch failed".to_string())?;
+
+    Ok(response.status().as_u16() != 404)
+}
+
+#[tauri::command]
 async fn download_and_install_update(
     url: String,
     window: tauri::Window,
@@ -79,12 +118,15 @@ fn main() {
             minimize_window,
             maximize_window,
             close_window,
+            whep_request,
+            check_stream_live,
             download_and_install_update,
         ])
         .setup(|app| {
             use tauri::Manager;
             let window = app.get_webview_window("main").unwrap();
             window.set_decorations(false)?;
+            window.open_devtools();
             Ok(())
         })
         .run(tauri::generate_context!())

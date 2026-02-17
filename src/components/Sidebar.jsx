@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { HiPlus, HiX, HiCog } from 'react-icons/hi';
+import { tauriApi } from '../tauriApi';
 import './Sidebar.css';
 
 function Sidebar({ streams, activeStreamId, onStreamSelect, onStreamRemove, onAddStream, onOpenSettings }) {
@@ -9,21 +10,13 @@ function Sidebar({ streams, activeStreamId, onStreamSelect, onStreamRemove, onAd
   useEffect(() => {
     const checkStatuses = async () => {
       const statuses = {};
-      
+
       await Promise.all(
         streams.map(async (stream) => {
           try {
-            const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
             const serverUrl = localStorage.getItem('serverUrl') || 'https://stream.nnfz.ru';
-            const checkUrl = isDev
-              ? `/live-check/${stream.key}.m3u8`
-              : `${serverUrl}/live/${stream.key}.m3u8`;
-            const response = await fetch(checkUrl, {
-              method: 'GET',
-              cache: 'no-cache',
-              headers: { 'Range': 'bytes=0-0' }
-            });
-            statuses[stream.id] = response.status !== 404;
+            const url = `${serverUrl}/live/${stream.key}.m3u8`;
+            statuses[stream.id] = await tauriApi.checkStreamLive(url);
           } catch (e) {
             statuses[stream.id] = false;
           }
@@ -36,8 +29,6 @@ function Sidebar({ streams, activeStreamId, onStreamSelect, onStreamRemove, onAd
     const interval = setInterval(checkStatuses, 10000);
     return () => clearInterval(interval);
   }, [streams]);
-
-  // Убрана строка if (hidden) return null — видимостью управляет App.jsx
 
   return (
     <aside className="sidebar">
@@ -68,7 +59,7 @@ function Sidebar({ streams, activeStreamId, onStreamSelect, onStreamRemove, onAd
               <div className="stream-name">{stream.name}</div>
               <div className="stream-key mono">{stream.key}</div>
             </div>
-            <button 
+            <button
               className="remove-btn"
               onClick={(e) => {
                 e.stopPropagation();

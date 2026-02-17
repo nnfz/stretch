@@ -1,6 +1,6 @@
 [package]
 name = "stretch"
-version = "1.0.6"
+version = "2.0.0"
 description = "stretch"
 authors = ["nnfz"]
 edition = "2021"
@@ -10,7 +10,7 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", features = ["tray-icon", "devtools"] }
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -1,29 +1,20 @@
-// hooks/useWebRTC.js
 import { useState, useCallback, useRef, useEffect } from 'react';
-
-const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+import { tauriApi } from '../tauriApi';
 
 const getServerUrl = () => {
   return localStorage.getItem('serverUrl') || 'https://stream.nnfz.ru';
 };
 
-// Add NACK support for audio in SDP
 function enableAudioNack(sdp) {
   const lines = sdp.split('\r\n');
   const result = [];
-  let audioMid = null;
   let inAudio = false;
-  let audioPayloads = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Detect audio m-line
     if (line.startsWith('m=audio')) {
       inAudio = true;
-      // Extract payload types
-      const parts = line.split(' ');
-      audioPayloads = parts.slice(3);
       result.push(line);
       continue;
     }
@@ -34,12 +25,9 @@ function enableAudioNack(sdp) {
 
     result.push(line);
 
-    // After each a=rtpmap line in audio section,
-    // add a=rtcp-fb nack if not already present
     if (inAudio && line.startsWith('a=rtpmap:')) {
       const pt = line.split(':')[1]?.split(' ')[0];
       if (pt) {
-        // Check if nack already exists for this PT
         const hasNack = lines.some(l =>
           l === `a=rtcp-fb:${pt} nack` ||
           l === `a=rtcp-fb:${pt} nack `
@@ -72,30 +60,24 @@ function useWebRTC(videoRef, streamKey) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
     }
-
     if (checkTimerRef.current) {
       clearTimeout(checkTimerRef.current);
       checkTimerRef.current = null;
     }
-
     if (pcRef.current) {
       pcRef.current.close();
       pcRef.current = null;
     }
-
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
-
     isConnectingRef.current = false;
   }, [videoRef]);
 
   const safePlay = useCallback(async () => {
     if (!videoRef.current) return;
-
     try {
       if (playPromiseRef.current) return;
-
       playPromiseRef.current = videoRef.current.play();
       await playPromiseRef.current;
       playPromiseRef.current = null;
@@ -150,35 +132,13 @@ function useWebRTC(videoRef, streamKey) {
       };
 
       const offer = await pc.createOffer();
-
-      // Inject NACK for audio into offer SDP
       const enhancedSDP = enableAudioNack(offer.sdp);
-      console.log('[SDP] Audio NACK injected');
 
-      await pc.setLocalDescription({
-        type: 'offer',
-        sdp: enhancedSDP
-      });
+      await pc.setLocalDescription({ type: 'offer', sdp: enhancedSDP });
 
       const serverUrl = getServerUrl();
-      const WHEP_ENDPOINT = isDev ? '/rtc/v1/whep/' : `${serverUrl}/rtc/v1/whep/`;
-      const url = `${WHEP_ENDPOINT}?app=live&stream=${streamKey}`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/sdp' },
-        body: enhancedSDP,
-      });
-
-      if (!response.ok) throw new Error(`WHEP вернул статус ${response.status}`);
-
-      const answerSDP = await response.text();
-
-      // Log if server accepted audio NACK
-      if (answerSDP.includes('a=rtcp-fb:') && answerSDP.includes('nack')) {
-        console.log('[SDP] Server supports NACK for audio ✓');
-      } else {
-        console.warn('[SDP] Server may not support audio NACK');
-      }
+      const whepUrl = `${serverUrl}/rtc/v1/whep/?app=live&stream=${streamKey}`;
+      const answerSDP = await tauriApi.whepRequest(whepUrl, enhancedSDP);
 
       await pc.setRemoteDescription(
         new RTCSessionDescription({ type: 'answer', sdp: answerSDP })

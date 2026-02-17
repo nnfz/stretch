@@ -6,6 +6,10 @@ import useWebRTC from '../hooks/useWebRTC';
 import useAdaptiveBuffer from '../hooks/useAdaptiveBuffer';
 import './Player.css';
 
+const BOOST_MAX = 300;
+const NORMAL_MAX = 100;
+const SLIDER_TRANSITION_MS = 350;
+
 function Player({ stream }) {
   const videoRef = useRef(null);
   const playerContainerRef = useRef(null);
@@ -13,6 +17,11 @@ function Player({ stream }) {
   const prevTimestampRef = useRef(0);
   const prevPacketsLostRef = useRef(0);
   const prevPacketsReceivedRef = useRef(0);
+
+  const audioCtxRef = useRef(null);
+  const gainNodeRef = useRef(null);
+  const sourceNodeRef = useRef(null);
+  const audioConnectedRef = useRef(false);
 
   const [stats, setStats] = useState({
     latency: 0, jitter: 0, packetLoss: 0,
@@ -25,6 +34,15 @@ function Player({ stream }) {
   const sliderRef = useRef(null);
   const fsSliderRef = useRef(null);
   const previousVolumeRef = useRef(100);
+
+  const [isCtrlHeld, setIsCtrlHeld] = useState(false);
+  const [sliderMax, setSliderMax] = useState(() => {
+    const saved = localStorage.getItem(`volume_${stream.key}`);
+    const v = saved !== null ? parseInt(saved) : 100;
+    return v > NORMAL_MAX ? BOOST_MAX : NORMAL_MAX;
+  });
+  const sliderMaxAnimRef = useRef(sliderMax);
+  const animFrameRef = useRef(null);
 
   const [showFullStats, setShowFullStats] = useState(() => {
     const saved = localStorage.getItem('showFullStats');
@@ -63,14 +81,108 @@ function Player({ stream }) {
     return () => disconnect();
   }, [connect, disconnect, stream.key]);
 
+  const setupAudioBoost = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || audioConnectedRef.current) return;
+
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      const ctx = audioCtxRef.current;
+
+      if (ctx.state === 'suspended') ctx.resume();
+
+      sourceNodeRef.current = ctx.createMediaElementSource(video);
+      gainNodeRef.current = ctx.createGain();
+      sourceNodeRef.current.connect(gainNodeRef.current);
+      gainNodeRef.current.connect(ctx.destination);
+      audioConnectedRef.current = true;
+    } catch (e) {}
+  }, []);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     video.muted = isMuted;
-    video.volume = Math.min(Math.max(volume / 100, 0), 1);
+
+    if (volume > NORMAL_MAX && !isMuted) {
+      setupAudioBoost();
+      video.volume = 1;
+      if (gainNodeRef.current) {
+        gainNodeRef.current.gain.value = volume / 100;
+      }
+    } else {
+      video.volume = Math.min(Math.max(volume / 100, 0), 1);
+      if (gainNodeRef.current) {
+        gainNodeRef.current.gain.value = 1;
+      }
+    }
+
     localStorage.setItem(`muted_${stream.key}`, isMuted.toString());
     localStorage.setItem(`volume_${stream.key}`, volume.toString());
-  }, [isMuted, volume, stream.key]);
+  }, [isMuted, volume, stream.key, setupAudioBoost]);
+
+  useEffect(() => {
+    return () => {
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close();
+        audioCtxRef.current = null;
+        audioConnectedRef.current = false;
+      }
+    };
+  }, []);
+
+  const animateSliderMax = useCallback((targetMax) => {
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+
+    const startMax = sliderMaxAnimRef.current;
+    const startTime = performance.now();
+
+    const tick = (now) => {
+      const t = Math.min((now - startTime) / SLIDER_TRANSITION_MS, 1);
+      const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+      const current = Math.round(startMax + (targetMax - startMax) * eased);
+      sliderMaxAnimRef.current = current;
+      setSliderMax(current);
+
+      if (t < 1) {
+        animFrameRef.current = requestAnimationFrame(tick);
+      } else {
+        sliderMaxAnimRef.current = targetMax;
+        setSliderMax(targetMax);
+      }
+    };
+
+    animFrameRef.current = requestAnimationFrame(tick);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if ((e.key === 'Control' || e.key === 'Meta') && !isCtrlHeld) {
+        setIsCtrlHeld(true);
+        animateSliderMax(BOOST_MAX);
+      }
+    };
+    const onKeyUp = (e) => {
+      if (e.key === 'Control' || e.key === 'Meta') {
+        setIsCtrlHeld(false);
+        setVolume(prev => {
+          if (prev <= NORMAL_MAX) {
+            animateSliderMax(NORMAL_MAX);
+          }
+          return prev;
+        });
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, [isCtrlHeld, animateSliderMax]);
 
   useEffect(() => {
     if (!isDragging) return;
@@ -216,7 +328,7 @@ function Player({ stream }) {
   const getThumbPosition = (slider) => {
     if (!slider) return '50%';
     const min = parseInt(slider.min) || 0;
-    const max = parseInt(slider.max) || 100;
+    const max = sliderMax;
     const val = Math.min(volume, max);
     const percent = (val - min) / (max - min);
     const thumbWidth = 14;
@@ -235,6 +347,7 @@ function Player({ stream }) {
 
   const statusInfo = getStatusInfo();
   const connectionQuality = getConnectionQuality();
+  const isBoosted = volume > NORMAL_MAX;
 
   const bufferRefMax = Math.max(
     bufferInfo.target > 0 ? bufferInfo.target * 3 : bufferInfo.delayHint * 3,
@@ -269,12 +382,15 @@ function Player({ stream }) {
         ref={ref}
         type="range"
         min="0"
-        max="100"
-        value={Math.min(volume, 100)}
+        max={sliderMax}
+        value={Math.min(volume, sliderMax)}
         onChange={handleVolumeChange}
         onMouseDown={handleSliderMouseDown}
         onTouchStart={handleSliderMouseDown}
-        className={`${className} ${isDragging ? 'slider-active' : ''}`}
+        className={`${className} ${isDragging ? 'slider-active' : ''} ${isBoosted || isCtrlHeld ? 'boosted' : ''}`}
+        style={{
+          '--slider-fill': `${(Math.min(volume, sliderMax) / sliderMax) * 100}%`,
+        }}
       />
     </div>
   );
@@ -283,7 +399,6 @@ function Player({ stream }) {
     if (status !== 'playing') return null;
     const sep = <span className={isFS ? 'fs-stats-separator' : 'stat-separator'}>•</span>;
 
-    // Минимальный режим — только пинг и потери
     if (!showFullStats) {
       return (
         <div className={isFS ? 'fs-stats mono' : 'stream-stats'}>
@@ -306,7 +421,6 @@ function Player({ stream }) {
       );
     }
 
-    // Полный режим
     return (
       <div className={isFS ? 'fs-stats mono' : 'stream-stats'}>
         <span className="stat-item mono">

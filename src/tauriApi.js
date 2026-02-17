@@ -8,9 +8,11 @@ export const tauriApi = {
   closeWindow: () => invoke('close_window'),
   platform: 'windows',
 
-  downloadAndInstallUpdate: async (url) => {
-    return invoke('download_and_install_update', { url });
-  },
+  whepRequest: (url, sdp) => invoke('whep_request', { url, sdp }),
+
+  checkStreamLive: (url) => invoke('check_stream_live', { url }),
+
+  downloadAndInstallUpdate: (url) => invoke('download_and_install_update', { url }),
 
   onUpdateProgress: (callback) => {
     listen('update-download-progress', (event) => {
