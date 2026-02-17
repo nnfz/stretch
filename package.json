@@ -24,9 +24,11 @@
     "vite": "^5.0.8",
     "wait-on": "^7.2.0"
   },
-  " build": {
-    "appId": "com.stretch.player",
+  "build": {
+    "appId": "com.nnfz.stretch",
     "productName": "Stretch",
+    "copyright": "Copyright © 2025 NNFZ",
+    "artifactName": "${productName}-${version}-Setup.${ext}",
     "directories": {
       "output": "dist"
     },
@@ -34,10 +36,10 @@
       "main.js",
       "preload.js",
       "dist/**/*",
-      "src/icon/icon.png"
+      "src/icon/*"
     ],
     "win": {
-      "icon": "src/icon/icon.png",
+      "icon": "src/icon/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -47,8 +49,15 @@
         }
       ]
     },
-    "linux": {
-      "target": "AppImage"
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "installerIcon": "src/icon/icon.ico",
+      "uninstallerIcon": "src/icon/icon.ico",
+      "installerHeaderIcon": "src/icon/icon.ico"
     }
   }
 }
