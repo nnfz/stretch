@@ -22,13 +22,20 @@ function Settings({ onClose }) {
   const [currentVersion, setCurrentVersion] = useState('');
   const [latestVersion, setLatestVersion] = useState('');
   const [downloadUrl, setDownloadUrl] = useState('');
+  const [downloadProgress, setDownloadProgress] = useState(0);
 
   useEffect(() => {
     const version = import.meta.env.APP_VERSION || '1.0.0';
     setCurrentVersion(version);
+
+    // Слушаем прогресс скачивания
+    if (window.electronAPI?.onUpdateProgress) {
+      window.electronAPI.onUpdateProgress((progress) => {
+        setDownloadProgress(progress);
+      });
+    }
   }, []);
 
-  // Save showFullStats immediately on toggle
   const handleToggleFullStats = (checked) => {
     setShowFullStats(checked);
     localStorage.setItem('showFullStats', checked.toString());
@@ -85,8 +92,23 @@ function Settings({ onClose }) {
     }
   };
 
-  const handleDownloadUpdate = () => {
-    if (downloadUrl) window.open(downloadUrl, '_blank');
+  const handleDownloadUpdate = async () => {
+    if (!downloadUrl) return;
+
+    // Если есть Electron API — скачиваем и устанавливаем автоматически
+    if (window.electronAPI?.downloadAndInstallUpdate) {
+      try {
+        setUpdateStatus('downloading');
+        setDownloadProgress(0);
+        await window.electronAPI.downloadAndInstallUpdate(downloadUrl);
+      } catch (error) {
+        console.error('Update failed:', error);
+        setUpdateStatus('error');
+      }
+    } else {
+      // Фоллбэк для браузера — просто открыть ссылку
+      window.open(downloadUrl, '_blank');
+    }
   };
 
   return (
@@ -132,7 +154,7 @@ function Settings({ onClose }) {
               />
               <span>Расширенная диагностика</span>
             </label>
-            <p className="hint">Показывать джиттер, битрейт, FPS, буфер и другие данные. Если выключено — только пинг и потери</p>
+            <p className="hint">Показывать джиттер, битрейт, FPS, буфер и другие данные</p>
           </div>
 
           <div className="form-group">
@@ -168,20 +190,34 @@ function Settings({ onClose }) {
                     Доступна новая версия: v{latestVersion}
                   </div>
                   <button className="btn-download" onClick={handleDownloadUpdate}>
-                    <HiDownload /> Скачать обновление
+                    <HiDownload /> Установить обновление
                   </button>
+                </div>
+              )}
+              {updateStatus === 'downloading' && (
+                <div className="update-downloading">
+                  <div className="update-status downloading">
+                    Скачивание обновления... {downloadProgress}%
+                  </div>
+                  <div className="progress-bar">
+                    <div
+                      className="progress-fill"
+                      style={{ width: `${downloadProgress}%` }}
+                    />
+                  </div>
+                  <p className="hint">Приложение перезапустится автоматически</p>
                 </div>
               )}
               {updateStatus === 'error' && (
                 <div className="update-status error">
-                  Не удалось проверить обновления
+                  Не удалось проверить/скачать обновление
                 </div>
               )}
             </div>
             <button
               className="btn-check"
               onClick={checkForUpdates}
-              disabled={updateStatus === 'checking'}
+              disabled={updateStatus === 'checking' || updateStatus === 'downloading'}
             >
               Проверить обновления
             </button>
