@@ -25,10 +25,11 @@ function TitleBar({ onToggleSidebar }) {
   };
 
   return (
-    <div className="titlebar" data-tauri-drag-region>
+    <div className="titlebar" style={{ WebkitAppRegion: 'drag' }}>
       <div className="titlebar-left">
         <button
           className="sidebar-toggle-btn"
+          style={{ WebkitAppRegion: 'no-drag' }}
           onClick={onToggleSidebar}
           title="Переключить сайдбар"
         >
@@ -38,13 +39,13 @@ function TitleBar({ onToggleSidebar }) {
       </div>
 
       <div className="titlebar-controls windows">
-        <button className="titlebar-button win-minimize" onClick={handleMinimize} title="Свернуть">
+        <button className="titlebar-button win-minimize" style={{ WebkitAppRegion: 'no-drag' }} onClick={handleMinimize} title="Свернуть">
           <VscChromeMinimize />
         </button>
-        <button className="titlebar-button win-maximize" onClick={handleMaximize} title={isMaximized ? 'Восстановить' : 'Развернуть'}>
+        <button className="titlebar-button win-maximize" style={{ WebkitAppRegion: 'no-drag' }} onClick={handleMaximize} title={isMaximized ? 'Восстановить' : 'Развернуть'}>
           {isMaximized ? <VscChromeRestore /> : <VscChromeMaximize />}
         </button>
-        <button className="titlebar-button win-close" onClick={handleClose} title="Закрыть">
+        <button className="titlebar-button win-close" style={{ WebkitAppRegion: 'no-drag' }} onClick={handleClose} title="Закрыть">
           <VscChromeClose />
         </button>
       </div>

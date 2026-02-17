@@ -126,7 +126,6 @@ fn main() {
             use tauri::Manager;
             let window = app.get_webview_window("main").unwrap();
             window.set_decorations(false)?;
-            window.open_devtools();
             Ok(())
         })
         .run(tauri::generate_context!())
