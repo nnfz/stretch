@@ -1,0 +1,46 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Stretch",
+  "version": "1.0.6",
+  "identifier": "com.nnfz.stretch",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev:vite",
+    "beforeBuildCommand": "npm run build:vite"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Stretch",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 670,
+        "minHeight": 600,
+        "decorations": false,
+        "transparent": false,
+        "resizable": true,
+        "center": true,
+        "label": "main"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "displayLanguageSelector": false,
+        "languages": ["Russian", "English"]
+      }
+    }
+  }
+}

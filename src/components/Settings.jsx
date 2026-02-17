@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { HiX, HiCheck, HiDownload } from 'react-icons/hi';
+import { tauriApi } from '../tauriApi';
 import './Settings.css';
 
 function Settings({ onClose }) {
@@ -28,12 +29,9 @@ function Settings({ onClose }) {
     const version = import.meta.env.APP_VERSION || '1.0.0';
     setCurrentVersion(version);
 
-    // Слушаем прогресс скачивания
-    if (window.electronAPI?.onUpdateProgress) {
-      window.electronAPI.onUpdateProgress((progress) => {
-        setDownloadProgress(progress);
-      });
-    }
+    tauriApi.onUpdateProgress((progress) => {
+      setDownloadProgress(progress);
+    });
   }, []);
 
   const handleToggleFullStats = (checked) => {
@@ -42,6 +40,16 @@ function Settings({ onClose }) {
     window.dispatchEvent(new CustomEvent('settingsChanged', {
       detail: { showFullStats: checked }
     }));
+  };
+
+  const compareVersions = (v1, v2) => {
+    const parts1 = v1.split('.').map(Number);
+    const parts2 = v2.split('.').map(Number);
+    for (let i = 0; i < 3; i++) {
+      if (parts1[i] > parts2[i]) return 1;
+      if (parts1[i] < parts2[i]) return -1;
+    }
+    return 0;
   };
 
   const checkForUpdates = async () => {
@@ -68,16 +76,6 @@ function Settings({ onClose }) {
     }
   };
 
-  const compareVersions = (v1, v2) => {
-    const parts1 = v1.split('.').map(Number);
-    const parts2 = v2.split('.').map(Number);
-    for (let i = 0; i < 3; i++) {
-      if (parts1[i] > parts2[i]) return 1;
-      if (parts1[i] < parts2[i]) return -1;
-    }
-    return 0;
-  };
-
   const handleSave = () => {
     const oldServer = localStorage.getItem('serverUrl');
     localStorage.setItem('serverUrl', serverUrl);
@@ -94,20 +92,13 @@ function Settings({ onClose }) {
 
   const handleDownloadUpdate = async () => {
     if (!downloadUrl) return;
-
-    // Если есть Electron API — скачиваем и устанавливаем автоматически
-    if (window.electronAPI?.downloadAndInstallUpdate) {
-      try {
-        setUpdateStatus('downloading');
-        setDownloadProgress(0);
-        await window.electronAPI.downloadAndInstallUpdate(downloadUrl);
-      } catch (error) {
-        console.error('Update failed:', error);
-        setUpdateStatus('error');
-      }
-    } else {
-      // Фоллбэк для браузера — просто открыть ссылку
-      window.open(downloadUrl, '_blank');
+    try {
+      setUpdateStatus('downloading');
+      setDownloadProgress(0);
+      await tauriApi.downloadAndInstallUpdate(downloadUrl);
+    } catch (error) {
+      console.error('Update failed:', error);
+      setUpdateStatus('error');
     }
   };
 

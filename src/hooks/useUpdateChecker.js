@@ -10,6 +10,17 @@ function useUpdateChecker() {
     const autoUpdate = localStorage.getItem('autoUpdate');
     if (autoUpdate === 'false') return;
 
+    const compareVersions = (v1, v2) => {
+      const parts1 = v1.split('.').map(Number);
+      const parts2 = v2.split('.').map(Number);
+
+      for (let i = 0; i < 3; i++) {
+        if (parts1[i] > parts2[i]) return 1;
+        if (parts1[i] < parts2[i]) return -1;
+      }
+      return 0;
+    };
+
     const checkForUpdates = async () => {
       try {
         const currentVersion = import.meta.env.APP_VERSION || '1.0.0';
@@ -18,13 +29,13 @@ function useUpdateChecker() {
             'Accept': 'application/vnd.github.v3+json'
           }
         });
-        
+
         if (!response.ok) return;
-        
+
         const data = await response.json();
         const latestVersion = data.tag_name.replace('v', '');
         const asset = data.assets.find(a => a.name.endsWith('.exe'));
-        
+
         if (compareVersions(currentVersion, latestVersion) < 0 && asset) {
           setHasUpdate(true);
           setUpdateInfo({
@@ -37,20 +48,9 @@ function useUpdateChecker() {
       }
     };
 
-    const compareVersions = (v1, v2) => {
-      const parts1 = v1.split('.').map(Number);
-      const parts2 = v2.split('.').map(Number);
-      
-      for (let i = 0; i < 3; i++) {
-        if (parts1[i] > parts2[i]) return 1;
-        if (parts1[i] < parts2[i]) return -1;
-      }
-      return 0;
-    };
-
     checkForUpdates();
     const interval = setInterval(checkForUpdates, CHECK_INTERVAL);
-    
+
     return () => clearInterval(interval);
   }, []);
 

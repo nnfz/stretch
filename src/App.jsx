@@ -6,6 +6,7 @@ import Player from './components/Player';
 import AddStreamModal from './components/AddStreamModal';
 import Settings from './components/Settings';
 import useUpdateChecker from './hooks/useUpdateChecker';
+import { tauriApi } from './tauriApi';
 import './App.css';
 
 const SIDEBAR_BREAKPOINT = 1030;
@@ -15,23 +16,22 @@ function App() {
     const saved = localStorage.getItem('streams');
     return saved ? JSON.parse(saved) : [];
   });
-  
+
   const [activeStreamId, setActiveStreamId] = useState(() => {
     const saved = localStorage.getItem('activeStreamId');
     return saved || null;
   });
-  
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [isSidebarVisible, setIsSidebarVisible] = useState(() => {
     return window.innerWidth >= SIDEBAR_BREAKPOINT;
   });
-  // Храним, скрыл ли пользователь сайдбар вручную
   const [manuallyHidden, setManuallyHidden] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const { hasUpdate, updateInfo } = useUpdateChecker();
 
-  // Следим за размером окна
   useEffect(() => {
     let prevWidth = window.innerWidth;
 
@@ -39,11 +39,8 @@ function App() {
       const currentWidth = window.innerWidth;
 
       if (currentWidth < SIDEBAR_BREAKPOINT) {
-        // Окно стало узким — прячем сайдбар
         setIsSidebarVisible(false);
       } else if (prevWidth < SIDEBAR_BREAKPOINT && currentWidth >= SIDEBAR_BREAKPOINT) {
-        // Окно стало широким (пересекли порог снизу вверх)
-        // Показываем только если пользователь не скрывал вручную
         if (!manuallyHidden) {
           setIsSidebarVisible(true);
         }
@@ -77,7 +74,7 @@ function App() {
   const removeStream = useCallback((id) => {
     const newStreams = streams.filter(s => s.id !== id);
     saveStreams(newStreams);
-    
+
     if (activeStreamId === id) {
       const newActive = newStreams[0]?.id || null;
       setActiveStreamId(newActive);
@@ -97,17 +94,25 @@ function App() {
   const toggleSidebar = useCallback(() => {
     setIsSidebarVisible(prev => {
       const next = !prev;
-      // Если пользователь скрывает при широком окне — запоминаем
       if (!next && window.innerWidth >= SIDEBAR_BREAKPOINT) {
         setManuallyHidden(true);
       }
-      // Если пользователь показывает — сбрасываем флаг
       if (next) {
         setManuallyHidden(false);
       }
       return next;
     });
   }, []);
+
+  const handleInstallUpdate = useCallback(async () => {
+    if (!updateInfo?.downloadUrl || isUpdating) return;
+    setIsUpdating(true);
+    try {
+      await tauriApi.downloadAndInstallUpdate(updateInfo.downloadUrl);
+    } catch (e) {
+      setIsUpdating(false);
+    }
+  }, [updateInfo, isUpdating]);
 
   const activeStream = streams.find(s => s.id === activeStreamId);
 
@@ -124,7 +129,7 @@ function App() {
               transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
               style={{ overflow: 'hidden', height: '100%', display: 'flex', flexShrink: 0 }}
             >
-              <Sidebar 
+              <Sidebar
                 streams={streams}
                 activeStreamId={activeStreamId}
                 onStreamSelect={setActive}
@@ -144,7 +149,7 @@ function App() {
                 <h2>Нет активных стримов</h2>
                 <p>Добавьте стрим чтобы начать просмотр</p>
               </div>
-              <button 
+              <button
                 className="btn-add"
                 onClick={() => setShowAddModal(true)}
               >
@@ -156,7 +161,7 @@ function App() {
       </div>
       <AnimatePresence>
         {showAddModal && (
-          <AddStreamModal 
+          <AddStreamModal
             onClose={() => setShowAddModal(false)}
             onAdd={addStream}
           />
@@ -167,26 +172,29 @@ function App() {
           <Settings onClose={() => setShowSettings(false)} />
         )}
       </AnimatePresence>
-      {hasUpdate && updateInfo && (
-        <motion.div 
-          className="update-notification"
-          initial={{ opacity: 0, y: 50 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 50 }}
-        >
-          <div className="update-content">
-            <span className="update-text">
-              Доступна новая версия v{updateInfo.version}
-            </span>
-            <button 
-              className="update-download-btn"
-              onClick={() => window.open(updateInfo.downloadUrl, '_blank')}
-            >
-              Скачать
-            </button>
-          </div>
-        </motion.div>
-      )}
+      <AnimatePresence>
+        {hasUpdate && updateInfo && (
+          <motion.div
+            className="update-notification"
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+          >
+            <div className="update-content">
+              <span className="update-text">
+                Доступна новая версия v{updateInfo.version}
+              </span>
+              <button
+                className="update-download-btn"
+                onClick={handleInstallUpdate}
+                disabled={isUpdating}
+              >
+                {isUpdating ? 'Скачивание...' : 'Установить'}
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

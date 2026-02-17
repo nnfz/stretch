@@ -1,6 +1,9 @@
 import { useRef, useCallback, useEffect, useState } from 'react';
 
 const POLL_MS = 500;
+const HINT_MIN = 0.03;
+const HINT_MAX = 1.0;
+const HINT_INITIAL = 0.03;
 
 export default function useAdaptiveBuffer(videoRef, getPC, isActive) {
   const [bufferInfo, setBufferInfo] = useState({
@@ -12,7 +15,7 @@ export default function useAdaptiveBuffer(videoRef, getPC, isActive) {
     droppedRate: 0,
     nackCount: 0,
     pliCount: 0,
-    delayHint: 50,
+    delayHint: 30,
     hasData: false,
   });
 
@@ -30,7 +33,7 @@ export default function useAdaptiveBuffer(videoRef, getPC, isActive) {
   const lastStallTs = useRef(0);
   const sm = useRef({ level: -1, target: -1 });
   const everHadJB = useRef(false);
-  const hintRef = useRef(0.05);
+  const hintRef = useRef(HINT_INITIAL);
 
   useEffect(() => {
     if (!isActive) return;
@@ -146,70 +149,63 @@ export default function useAdaptiveBuffer(videoRef, getPC, isActive) {
           if (p.ts > 0 && dE === 0 && hasJBField) health = 'critical';
           else if (justStalled || droppedRate > 8) health = 'critical';
           else if (droppedRate > 3 || lossRate > 0.05) health = 'low';
-          else if (levelMs > 500) health = 'overflow';
+          else if (levelMs > 200) health = 'overflow';
           else if (droppedRate < 1 && levelMs > 5 && !justStalled) health = 'excellent';
         } else {
           if (justStalled || droppedRate > 8) health = 'critical';
           else if (droppedRate > 3) health = 'low';
         }
 
-        // === Calculate desired hint for VIDEO ONLY ===
-        let desired = 0.05;
+        let desired = HINT_MIN;
 
         if (droppedRate > 0) {
           const t = Math.min(droppedRate / 10, 1);
-          desired = Math.max(desired, 0.1 + t * 1.9);
+          desired = Math.max(desired, 0.05 + t * 0.95);
         }
 
         const since = now - lastStallTs.current;
         if (lastStallTs.current > 0) {
-          if (since < 10000)      desired = Math.max(desired, 2.0);
-          else if (since < 20000) desired = Math.max(desired, 1.5);
-          else if (since < 40000) desired = Math.max(desired, 1.0);
-          else if (since < 60000) desired = Math.max(desired, 0.5);
+          if (since < 10000)      desired = Math.max(desired, 1.0);
+          else if (since < 20000) desired = Math.max(desired, 0.7);
+          else if (since < 40000) desired = Math.max(desired, 0.4);
+          else if (since < 60000) desired = Math.max(desired, 0.2);
         }
 
-        if (lossRate > 0.01) desired = Math.max(desired, 0.3);
-        if (lossRate > 0.03) desired = Math.max(desired, 0.8);
-        if (lossRate > 0.05) desired = Math.max(desired, 1.5);
-        if (lossRate > 0.10) desired = Math.max(desired, 2.0);
+        if (lossRate > 0.01) desired = Math.max(desired, 0.15);
+        if (lossRate > 0.03) desired = Math.max(desired, 0.4);
+        if (lossRate > 0.05) desired = Math.max(desired, 0.7);
+        if (lossRate > 0.10) desired = Math.max(desired, 1.0);
 
-        if (jitter > 0.010) desired = Math.max(desired, jitter * 15);
-        if (jitter > 0.030) desired = Math.max(desired, 0.8);
-        if (jitter > 0.050) desired = Math.max(desired, 1.5);
+        if (jitter > 0.010) desired = Math.max(desired, jitter * 8);
+        if (jitter > 0.030) desired = Math.max(desired, 0.4);
+        if (jitter > 0.050) desired = Math.max(desired, 0.7);
 
-        if (totalStalls >= 3)  desired = Math.max(desired, 0.5);
-        if (totalStalls >= 6)  desired = Math.max(desired, 1.0);
-        if (totalStalls >= 10) desired = Math.max(desired, 1.5);
-        if (totalStalls >= 15) desired = Math.max(desired, 2.0);
+        if (totalStalls >= 3)  desired = Math.max(desired, 0.2);
+        if (totalStalls >= 6)  desired = Math.max(desired, 0.5);
+        if (totalStalls >= 10) desired = Math.max(desired, 0.7);
+        if (totalStalls >= 15) desired = Math.max(desired, 1.0);
 
-        if (pliCount > 5)  desired = Math.max(desired, 0.5);
-        if (pliCount > 15) desired = Math.max(desired, 1.0);
+        if (pliCount > 5)  desired = Math.max(desired, 0.2);
+        if (pliCount > 15) desired = Math.max(desired, 0.5);
 
-        desired = Math.min(desired, 2.0);
+        desired = Math.min(desired, HINT_MAX);
 
         if (desired > hintRef.current) {
           hintRef.current += (desired - hintRef.current) * 0.3;
         } else {
-          hintRef.current += (desired - hintRef.current) * 0.01;
+          hintRef.current += (desired - hintRef.current) * 0.02;
         }
 
         let hint = Math.round(hintRef.current * 1000) / 1000;
-        hint = Math.max(0.05, Math.min(hint, 2.0));
+        hint = Math.max(HINT_MIN, Math.min(hint, HINT_MAX));
 
-        // === ONLY apply to VIDEO receivers — NEVER touch audio ===
         try {
           const receivers = pc.getReceivers?.() || [];
           for (const r of receivers) {
             if (!r.track) continue;
-
-            // Video only
             if (r.track.kind === 'video' && 'playoutDelayHint' in r) {
               r.playoutDelayHint = hint;
             }
-
-            // DO NOT touch audio receivers here
-            // Audio delay is set once in useWebRTC.setupAudioBuffer
           }
         } catch (e) {}
 
@@ -253,11 +249,11 @@ export default function useAdaptiveBuffer(videoRef, getPC, isActive) {
     lastStallTs.current = 0;
     sm.current = { level: -1, target: -1 };
     everHadJB.current = false;
-    hintRef.current = 0.05;
+    hintRef.current = HINT_INITIAL;
     setBufferInfo({
       level: 0, target: 0, health: 'good',
       stalls: 0, dropped: 0, droppedRate: 0,
-      nackCount: 0, pliCount: 0, delayHint: 50,
+      nackCount: 0, pliCount: 0, delayHint: 30,
       hasData: false,
     });
   }, []);
@@ -268,7 +264,6 @@ export default function useAdaptiveBuffer(videoRef, getPC, isActive) {
       const receivers = pc?.getReceivers?.() || [];
       for (const r of receivers) {
         if (!r.track) continue;
-        // Only reset video
         if (r.track.kind === 'video' && 'playoutDelayHint' in r) {
           r.playoutDelayHint = 0;
         }
@@ -276,7 +271,7 @@ export default function useAdaptiveBuffer(videoRef, getPC, isActive) {
     } catch (e) {}
     lastStallTs.current = 0;
     sm.current = { level: -1, target: -1 };
-    hintRef.current = 0.05;
+    hintRef.current = HINT_INITIAL;
   }, [getPC]);
 
   return { bufferInfo, reset, skipToLive };
