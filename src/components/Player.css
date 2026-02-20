@@ -315,7 +315,6 @@
 .volume-tooltip {
   position: absolute;
   bottom: calc(100% + 8px);
-  transform: translateX(-50%);
   background: rgba(0, 0, 0, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.15);
   color: #fff;
