@@ -17,11 +17,19 @@ function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [activeStreamId, setActiveStreamId] = useState(() => {
-    const saved = localStorage.getItem('activeStreamId');
-    return saved || null;
+  const [activeStreamIds, setActiveStreamIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem('activeStreamIds');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    const legacy = localStorage.getItem('activeStreamId');
+    return legacy ? [legacy] : [];
   });
 
+  const [focusedStreamId, setFocusedStreamId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [isSidebarVisible, setIsSidebarVisible] = useState(() => {
@@ -67,29 +75,55 @@ function App() {
     };
     const newStreams = [...streams, newStream];
     saveStreams(newStreams);
-    setActiveStreamId(newStream.id);
-    localStorage.setItem('activeStreamId', newStream.id);
+    setActiveStreamIds([newStream.id]);
+    setFocusedStreamId(null);
   }, [streams, saveStreams]);
 
   const removeStream = useCallback((id) => {
     const newStreams = streams.filter(s => s.id !== id);
     saveStreams(newStreams);
 
-    if (activeStreamId === id) {
-      const newActive = newStreams[0]?.id || null;
-      setActiveStreamId(newActive);
-      if (newActive) {
-        localStorage.setItem('activeStreamId', newActive);
+    if (activeStreamIds.includes(id)) {
+      const newActiveIds = activeStreamIds.filter(aid => aid !== id);
+      if (newActiveIds.length === 0 && newStreams.length > 0) {
+        setActiveStreamIds([newStreams[0].id]);
       } else {
-        localStorage.removeItem('activeStreamId');
+        setActiveStreamIds(newActiveIds);
       }
+      if (focusedStreamId === id) setFocusedStreamId(null);
     }
-  }, [streams, activeStreamId, saveStreams]);
+  }, [streams, activeStreamIds, focusedStreamId, saveStreams]);
 
-  const setActive = useCallback((id) => {
-    setActiveStreamId(id);
-    localStorage.setItem('activeStreamId', id);
-  }, []);
+  const setActive = useCallback((id, ctrlKey) => {
+    if (ctrlKey) {
+      if (activeStreamIds.includes(id)) {
+        const newIds = activeStreamIds.filter(aid => aid !== id);
+        setActiveStreamIds(newIds);
+        if (focusedStreamId === id) setFocusedStreamId(null);
+      } else {
+        if (activeStreamIds.length < 4) {
+          setActiveStreamIds(prev => [...prev, id]);
+        } else {
+          setActiveStreamIds(prev => [...prev.slice(0, 3), id]);
+        }
+        setFocusedStreamId(null);
+      }
+    } else {
+      setActiveStreamIds([id]);
+      setFocusedStreamId(null);
+    }
+  }, [activeStreamIds, focusedStreamId]);
+
+  const handlePlayerClick = useCallback((streamId) => {
+    if (activeStreamIds.length < 2) return;
+    if (focusedStreamId === null) {
+      setFocusedStreamId(streamId);
+    } else if (focusedStreamId === streamId) {
+      setFocusedStreamId(null);
+    } else {
+      setFocusedStreamId(streamId);
+    }
+  }, [activeStreamIds.length, focusedStreamId]);
 
   const toggleSidebar = useCallback(() => {
     setIsSidebarVisible(prev => {
@@ -114,7 +148,18 @@ function App() {
     }
   }, [updateInfo, isUpdating]);
 
-  const activeStream = streams.find(s => s.id === activeStreamId);
+  useEffect(() => {
+    localStorage.setItem('activeStreamIds', JSON.stringify(activeStreamIds));
+    if (activeStreamIds.length > 0) {
+      localStorage.setItem('activeStreamId', activeStreamIds[0]);
+    } else {
+      localStorage.removeItem('activeStreamId');
+    }
+  }, [activeStreamIds]);
+
+  const activeStreams = activeStreamIds
+    .map(id => streams.find(s => s.id === id))
+    .filter(Boolean);
 
   return (
     <div className="app">
@@ -131,7 +176,7 @@ function App() {
             >
               <Sidebar
                 streams={streams}
-                activeStreamId={activeStreamId}
+                activeStreamIds={activeStreamIds}
                 onStreamSelect={setActive}
                 onStreamRemove={removeStream}
                 onAddStream={() => setShowAddModal(true)}
@@ -141,8 +186,97 @@ function App() {
           )}
         </AnimatePresence>
         <main className="main-content">
-          {activeStream ? (
-            <Player key={activeStream.id} stream={activeStream} />
+          {activeStreams.length > 0 ? (
+            <div className="players-container">
+              <AnimatePresence initial={false}>
+                {activeStreams.map((stream, index) => {
+                  const count = activeStreams.length;
+                  const isFocused = focusedStreamId === stream.id;
+                  const hasFocused = focusedStreamId !== null;
+                  const isHidden = hasFocused && !isFocused;
+
+                  let style;
+                  if (hasFocused) {
+                    style = isFocused
+                      ? { left: '0%', top: '0%', width: '100%', height: '100%' }
+                      : { left: '50%', top: '50%', width: '0%', height: '0%' };
+                  } else if (count === 1) {
+                    style = { left: '0%', top: '0%', width: '100%', height: '100%' };
+                  } else if (count === 2) {
+                    style = {
+                      left: index === 0 ? '0%' : '50%',
+                      top: '0%',
+                      width: '50%',
+                      height: '100%',
+                    };
+                  } else if (count === 3) {
+                    if (index === 0) {
+                      style = { left: '0%', top: '0%', width: '100%', height: '50%' };
+                    } else {
+                      style = {
+                        left: index === 1 ? '0%' : '50%',
+                        top: '50%',
+                        width: '50%',
+                        height: '50%',
+                      };
+                    }
+                  } else {
+                    const row = index < 2 ? 0 : 1;
+                    const col = index % 2;
+                    style = {
+                      left: `${col * 50}%`,
+                      top: `${row * 50}%`,
+                      width: '50%',
+                      height: '50%',
+                    };
+                  }
+
+                  // Начальная позиция: центр целевого слота, нулевой размер
+                  const centerLeft = parseFloat(style.left) + parseFloat(style.width) / 2;
+                  const centerTop = parseFloat(style.top) + parseFloat(style.height) / 2;
+
+                  return (
+                    <motion.div
+                      key={stream.id}
+                      className="player-wrapper"
+                      initial={{
+                        opacity: 0,
+                        left: `${centerLeft}%`,
+                        top: `${centerTop}%`,
+                        width: '0%',
+                        height: '0%',
+                      }}
+                      animate={{
+                        opacity: isHidden ? 0 : 1,
+                        left: isHidden ? `${centerLeft}%` : style.left,
+                        top: isHidden ? `${centerTop}%` : style.top,
+                        width: isHidden ? '0%' : style.width,
+                        height: isHidden ? '0%' : style.height,
+                      }}
+                      exit={{
+                        opacity: 0,
+                        left: `${centerLeft}%`,
+                        top: `${centerTop}%`,
+                        width: '0%',
+                        height: '0%',
+                      }}
+                      transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+                      style={{
+                        position: 'absolute',
+                        overflow: 'hidden',
+                        zIndex: isFocused ? 2 : 1,
+                        pointerEvents: isHidden ? 'none' : 'auto',
+                      }}
+                    >
+                      <Player
+                        stream={stream}
+                        onPlayerClick={count >= 2 ? () => handlePlayerClick(stream.id) : undefined}
+                      />
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            </div>
           ) : (
             <div className="empty-state">
               <div className="main-text">

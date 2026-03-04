@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { HiX, HiCheck, HiDownload } from 'react-icons/hi';
+import { HiX, HiCheck, HiDownload, HiExclamation } from 'react-icons/hi';
 import { tauriApi } from '../tauriApi';
 import './Settings.css';
 
@@ -24,10 +24,16 @@ function Settings({ onClose }) {
   const [latestVersion, setLatestVersion] = useState('');
   const [downloadUrl, setDownloadUrl] = useState('');
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [hwAccel, setHwAccel] = useState(true);
+  const [hwAccelChanged, setHwAccelChanged] = useState(false);
 
   useEffect(() => {
     const version = import.meta.env.APP_VERSION || '1.0.0';
     setCurrentVersion(version);
+
+    tauriApi.getHardwareAcceleration().then((val) => {
+      setHwAccel(val);
+    }).catch(() => {});
 
     tauriApi.onUpdateProgress((progress) => {
       setDownloadProgress(progress);
@@ -40,6 +46,16 @@ function Settings({ onClose }) {
     window.dispatchEvent(new CustomEvent('settingsChanged', {
       detail: { showFullStats: checked }
     }));
+  };
+
+  const handleToggleHwAccel = async (checked) => {
+    setHwAccel(checked);
+    try {
+      await tauriApi.setHardwareAcceleration(checked);
+      setHwAccelChanged(true);
+    } catch (e) {
+      console.error('Failed to save hw accel setting:', e);
+    }
   };
 
   const compareVersions = (v1, v2) => {
@@ -146,6 +162,23 @@ function Settings({ onClose }) {
               <span>Расширенная диагностика</span>
             </label>
             <p className="hint">Показывать джиттер, битрейт, FPS, буфер и другие данные</p>
+          </div>
+
+          <div className="form-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={hwAccel}
+                onChange={e => handleToggleHwAccel(e.target.checked)}
+              />
+              <span>Аппаратное ускорение (GPU)</span>
+            </label>
+            <p className="hint">Использовать GPU для рендеринга. Отключите при проблемах с отображением</p>
+            {hwAccelChanged && (
+              <div className="restart-hint">
+                <HiExclamation /> Перезапустите приложение для применения
+              </div>
+            )}
           </div>
 
           <div className="form-group">

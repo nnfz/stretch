@@ -163,7 +163,7 @@ function destroyAudioPipeline(streamKey) {
 
 // ==========================================
 
-function Player({ stream }) {
+function Player({ stream, onPlayerClick }) {
   const videoRef = useRef(null);
   const playerContainerRef = useRef(null);
   const prevBytesRef = useRef(0);
@@ -326,6 +326,31 @@ function Player({ stream }) {
       window.removeEventListener('touchend', up);
     };
   }, [isDragging]);
+
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    initAudio();
+
+    const step = 5;
+    const delta = e.deltaY < 0 ? step : -step;
+    const newVol = Math.max(0, Math.min(300, volumeRef.current + delta));
+
+    setVolume(newVol);
+    const shouldMute = newVol === 0;
+    if (shouldMute !== mutedRef.current) setIsMuted(shouldMute);
+    if (!shouldMute) previousVolumeRef.current = newVol;
+
+    applyVolume(videoRef.current, stream.key, newVol, shouldMute);
+    localStorage.setItem(`volume_${stream.key}`, newVol.toString());
+    localStorage.setItem(`muted_${stream.key}`, shouldMute.toString());
+  }, [initAudio, stream.key]);
+
+  useEffect(() => {
+    const el = playerContainerRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
 
   const handleMouseMove = useCallback(() => {
     setShowControls(true);
@@ -581,8 +606,8 @@ function Player({ stream }) {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
     >
-      <div className="video-container" onClick={toggleFullscreen}>
-        <video ref={videoRef} autoPlay playsInline muted className="video-element" />
+      <div className="video-container" onClick={!isFullscreen && onPlayerClick ? onPlayerClick : undefined}>
+        <video ref={videoRef} autoPlay playsInline muted className="video-element" style={{ cursor: onPlayerClick && !isFullscreen ? 'pointer' : 'default' }} />
 
         {showFullStats && status === 'playing' && bufferInfo.hasData && (
           <div className="buffer-health-bar">

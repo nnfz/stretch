@@ -20,6 +20,9 @@ export const tauriApi = {
     });
   },
 
+  getHardwareAcceleration: () => invoke('get_hardware_acceleration'),
+  setHardwareAcceleration: (enabled) => invoke('set_hardware_acceleration', { enabled }),
+
   isMaximized: async () => {
     const win = getCurrentWindow();
     return win.isMaximized();

@@ -1,6 +1,51 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tauri::Emitter;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+
+#[derive(Serialize, Deserialize)]
+struct AppSettings {
+    #[serde(default = "default_true")]
+    hardware_acceleration: bool,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            hardware_acceleration: true,
+        }
+    }
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn get_settings_path() -> PathBuf {
+    let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
+    PathBuf::from(appdata).join("com.nnfz.stretch").join("settings.json")
+}
+
+fn read_settings() -> AppSettings {
+    let path = get_settings_path();
+    if path.exists() {
+        let content = std::fs::read_to_string(&path).unwrap_or_default();
+        serde_json::from_str(&content).unwrap_or_default()
+    } else {
+        AppSettings::default()
+    }
+}
+
+fn write_settings(settings: &AppSettings) -> Result<(), String> {
+    let path = get_settings_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let content = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
+    std::fs::write(&path, content).map_err(|e| e.to_string())?;
+    Ok(())
+}
 
 #[tauri::command]
 fn minimize_window(window: tauri::Window) {
@@ -111,7 +156,26 @@ async fn download_and_install_update(
     std::process::exit(0);
 }
 
+#[tauri::command]
+fn get_hardware_acceleration() -> bool {
+    read_settings().hardware_acceleration
+}
+
+#[tauri::command]
+fn set_hardware_acceleration(enabled: bool) -> Result<bool, String> {
+    let mut settings = read_settings();
+    settings.hardware_acceleration = enabled;
+    write_settings(&settings)?;
+    Ok(enabled)
+}
+
 fn main() {
+    // Read settings before creating the webview
+    let settings = read_settings();
+    if !settings.hardware_acceleration {
+        std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-gpu");
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
@@ -121,6 +185,8 @@ fn main() {
             whep_request,
             check_stream_live,
             download_and_install_update,
+            get_hardware_acceleration,
+            set_hardware_acceleration,
         ])
         .setup(|app| {
             use tauri::Manager;

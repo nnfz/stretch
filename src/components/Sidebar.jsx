@@ -4,7 +4,7 @@ import { HiPlus, HiX, HiCog } from 'react-icons/hi';
 import { tauriApi } from '../tauriApi';
 import './Sidebar.css';
 
-function Sidebar({ streams, activeStreamId, onStreamSelect, onStreamRemove, onAddStream, onOpenSettings }) {
+function Sidebar({ streams, activeStreamIds = [], onStreamSelect, onStreamRemove, onAddStream, onOpenSettings }) {
   const [onlineStreams, setOnlineStreams] = useState({});
 
   useEffect(() => {
@@ -46,8 +46,8 @@ function Sidebar({ streams, activeStreamId, onStreamSelect, onStreamRemove, onAd
         {streams.map((stream, index) => (
           <motion.div
             key={stream.id}
-            className={`stream-item ${activeStreamId === stream.id ? 'active' : ''}`}
-            onClick={() => onStreamSelect(stream.id)}
+            className={`stream-item ${activeStreamIds.includes(stream.id) ? 'active' : ''}`}
+            onClick={(e) => onStreamSelect(stream.id, e.ctrlKey || e.metaKey)}
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: index * 0.05 }}

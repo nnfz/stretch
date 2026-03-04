@@ -25,6 +25,18 @@
   gap: 18px;
 }
 
+.players-container {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+.player-wrapper {
+  position: absolute;
+  overflow: hidden;
+}
+
 .main-text {
   display: flex;
   align-items: center;
