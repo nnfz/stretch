@@ -211,9 +211,19 @@ fn set_hardware_acceleration(enabled: bool) -> Result<bool, String> {
 fn main() {
     // Read settings before creating the webview
     let settings = read_settings();
+
+    // Build WebView2 arguments to reduce resource usage.
+    // --disable-background-timer-throttling is NOT set so that
+    // the browser CAN throttle timers when the window loses focus.
+    let mut args = vec![
+        "--autoplay-policy=no-user-gesture-required".to_string(),
+    ];
+
     if !settings.hardware_acceleration {
-        std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-gpu");
+        args.push("--disable-gpu".to_string());
     }
+
+    std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", args.join(" "));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -231,6 +241,18 @@ fn main() {
             use tauri::Manager;
             let window = app.get_webview_window("main").unwrap();
             window.set_decorations(false)?;
+
+            // Set process priority to below-normal so we don't steal
+            // CPU time from games running in the foreground.
+            #[cfg(target_os = "windows")]
+            {
+                use windows_sys::Win32::System::Threading::{
+                    GetCurrentProcess, SetPriorityClass, BELOW_NORMAL_PRIORITY_CLASS,
+                };
+                unsafe {
+                    SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
+                }
+            }
 
             // Fix Windows 10 frameless window border when maximized.
             // DwmExtendFrameIntoClientArea with -1 margins removes the

@@ -1,11 +1,12 @@
 import { useRef, useCallback, useEffect, useState } from 'react';
 
-const POLL_MS = 500;
+const POLL_MS_FOCUSED = 500;
+const POLL_MS_BACKGROUND = 5000;
 const HINT_MIN = 0.03;
 const HINT_MAX = 1.0;
 const HINT_INITIAL = 0.03;
 
-export default function useAdaptiveBuffer(videoRef, getPC, isActive) {
+export default function useAdaptiveBuffer(videoRef, getPC, isActive, appFocused = true) {
   const [bufferInfo, setBufferInfo] = useState({
     level: 0,
     target: 0,
@@ -98,7 +99,7 @@ export default function useAdaptiveBuffer(videoRef, getPC, isActive) {
         const dE = jbEmitted - p.jbEmitted;
         const dD = jbDelay   - p.jbDelay;
         const dT = jbTarget  - p.jbTarget;
-        const dt = p.ts > 0 ? (now - p.ts) / 1000 : POLL_MS / 1000;
+        const dt = p.ts > 0 ? (now - p.ts) / 1000 : POLL_MS_FOCUSED / 1000;
 
         const dDropped = Math.max(0, framesDropped - p.dropped);
         const dLost    = Math.max(0, pktLost  - p.pktLost);
@@ -230,7 +231,8 @@ export default function useAdaptiveBuffer(videoRef, getPC, isActive) {
       } catch (e) {}
     };
 
-    const id = setInterval(tick, POLL_MS);
+    const pollMs = appFocused ? POLL_MS_FOCUSED : POLL_MS_BACKGROUND;
+    const id = setInterval(tick, pollMs);
     const firstTick = setTimeout(tick, 200);
 
     return () => {
@@ -238,7 +240,7 @@ export default function useAdaptiveBuffer(videoRef, getPC, isActive) {
       clearTimeout(firstTick);
       video?.removeEventListener('waiting', onWaiting);
     };
-  }, [videoRef, getPC, isActive]);
+  }, [videoRef, getPC, isActive, appFocused]);
 
   const reset = useCallback(() => {
     prev.current = {

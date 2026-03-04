@@ -4,6 +4,7 @@ import { HiVolumeUp, HiVolumeOff } from 'react-icons/hi';
 import { HiArrowsPointingOut, HiArrowsPointingIn } from 'react-icons/hi2';
 import useWebRTC from '../hooks/useWebRTC';
 import useAdaptiveBuffer from '../hooks/useAdaptiveBuffer';
+import useAppFocused from '../hooks/useAppFocused';
 import './Player.css';
 
 // === WEB AUDIO API — MediaStream подход ===
@@ -114,7 +115,21 @@ function startSignalMonitor(streamKey) {
       console.log('[Audio] ✅ Signal detected!');
     }
 
-    if (checkCount < maxChecks) setTimeout(check, 500);
+    if (checkCount < maxChecks) {
+      setTimeout(check, 500);
+    } else {
+      // Disconnect analyser after monitoring to reduce CPU usage.
+      // The gainNode connects directly to destination instead.
+      try {
+        if (n.gainNode && n.analyser) {
+          n.gainNode.disconnect(n.analyser);
+          n.analyser.disconnect(n.ctx.destination);
+          n.gainNode.connect(n.ctx.destination);
+          n.analyser = null;
+          console.log('[Audio] Analyser disconnected (monitoring complete)');
+        }
+      } catch (e) {}
+    }
   };
 
   setTimeout(check, 200);
@@ -171,6 +186,7 @@ function Player({ stream, onPlayerClick }) {
   const prevPacketsLostRef = useRef(0);
   const prevPacketsReceivedRef = useRef(0);
   const audioInitializedRef = useRef(false);
+  const appFocused = useAppFocused();
 
   const [stats, setStats] = useState({
     latency: 0, jitter: 0, packetLoss: 0,
@@ -220,7 +236,7 @@ function Player({ stream, onPlayerClick }) {
 
   const {
     bufferInfo, reset: resetBuffer
-  } = useAdaptiveBuffer(videoRef, getPC, status === 'playing');
+  } = useAdaptiveBuffer(videoRef, getPC, status === 'playing', appFocused);
 
   const initAudio = useCallback(() => {
     if (!videoRef.current) return;
@@ -375,6 +391,8 @@ function Player({ stream, onPlayerClick }) {
 
   useEffect(() => {
     if (status !== 'playing') return;
+    // Throttle stats polling when app is in background (user is gaming)
+    const pollInterval = appFocused ? 1000 : 5000;
     const interval = setInterval(async () => {
       const pc = getPC();
       if (!pc) return;
@@ -428,9 +446,9 @@ function Player({ stream, onPlayerClick }) {
           bitrate, fps, resolution
         });
       } catch (err) {}
-    }, 1000);
+    }, pollInterval);
     return () => clearInterval(interval);
-  }, [status, getPC]);
+  }, [status, getPC, appFocused]);
 
   const toggleFullscreen = useCallback((e) => {
     e?.stopPropagation();

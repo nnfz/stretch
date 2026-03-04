@@ -177,7 +177,7 @@ function Settings({ onClose }) {
               />
               <span>Аппаратное ускорение (GPU)</span>
             </label>
-            <p className="hint">Использовать GPU для рендеринга. Отключите при проблемах с отображением</p>
+            <p className="hint">Использовать GPU для рендеринга. Отключите если приложение снижает FPS в играх</p>
             {hwAccelChanged && (
               <div className="restart-hint">
                 <HiExclamation /> Перезапустите приложение для применения
