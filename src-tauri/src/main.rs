@@ -105,6 +105,49 @@ async fn check_stream_live(url: String) -> Result<bool, String> {
     Ok(response.status().as_u16() != 404)
 }
 
+#[cfg(target_os = "windows")]
+fn shell_execute(path: &std::path::Path, args: &str) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use std::ffi::OsStr;
+
+    #[link(name = "shell32")]
+    extern "system" {
+        fn ShellExecuteW(
+            hwnd: isize,
+            lpOperation: *const u16,
+            lpFile: *const u16,
+            lpParameters: *const u16,
+            lpDirectory: *const u16,
+            nShowCmd: i32,
+        ) -> isize;
+    }
+
+    fn to_wide(s: &str) -> Vec<u16> {
+        OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
+    }
+
+    let verb = to_wide("open");
+    let file: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    let params = to_wide(args);
+
+    let result = unsafe {
+        ShellExecuteW(
+            0,
+            verb.as_ptr(),
+            file.as_ptr(),
+            params.as_ptr(),
+            std::ptr::null(),
+            0, // SW_HIDE
+        )
+    };
+
+    if result <= 32 {
+        Err(format!("Failed to launch installer (error code {})", result))
+    } else {
+        Ok(())
+    }
+}
+
 #[tauri::command]
 async fn download_and_install_update(
     url: String,
@@ -146,11 +189,7 @@ async fn download_and_install_update(
 
     drop(file);
 
-    std::process::Command::new(&temp_path)
-        .arg("/S")
-        .arg("--updated")
-        .spawn()
-        .map_err(|e| e.to_string())?;
+    shell_execute(&temp_path, "/S")?;
 
     std::thread::sleep(std::time::Duration::from_millis(500));
     std::process::exit(0);
@@ -192,6 +231,27 @@ fn main() {
             use tauri::Manager;
             let window = app.get_webview_window("main").unwrap();
             window.set_decorations(false)?;
+
+            // Fix Windows 10 frameless window border when maximized.
+            // DwmExtendFrameIntoClientArea with -1 margins removes the
+            // visible 1px "classic" border that appears on Win10 without Aero.
+            #[cfg(target_os = "windows")]
+            {
+                use windows_sys::Win32::Graphics::Dwm::DwmExtendFrameIntoClientArea;
+                use windows_sys::Win32::UI::Controls::MARGINS;
+
+                let hwnd = window.hwnd().unwrap().0 as *mut std::ffi::c_void;
+                let margins = MARGINS {
+                    cxLeftWidth: -1,
+                    cxRightWidth: -1,
+                    cyTopHeight: -1,
+                    cyBottomHeight: -1,
+                };
+                unsafe {
+                    DwmExtendFrameIntoClientArea(hwnd, &margins);
+                }
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())

@@ -15,7 +15,7 @@ export const tauriApi = {
   downloadAndInstallUpdate: (url) => invoke('download_and_install_update', { url }),
 
   onUpdateProgress: (callback) => {
-    listen('update-download-progress', (event) => {
+    return listen('update-download-progress', (event) => {
       callback(event.payload);
     });
   },

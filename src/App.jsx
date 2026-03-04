@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { HiX } from 'react-icons/hi';
 import TitleBar from './components/TitleBar';
 import Sidebar from './components/Sidebar';
 import Player from './components/Player';
@@ -37,6 +38,7 @@ function App() {
   });
   const [manuallyHidden, setManuallyHidden] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [updateDismissed, setUpdateDismissed] = useState(false);
 
   const { hasUpdate, updateInfo } = useUpdateChecker();
 
@@ -307,7 +309,7 @@ function App() {
         )}
       </AnimatePresence>
       <AnimatePresence>
-        {hasUpdate && updateInfo && (
+        {hasUpdate && updateInfo && !updateDismissed && (
           <motion.div
             className="update-notification"
             initial={{ opacity: 0, y: 50 }}
@@ -316,15 +318,23 @@ function App() {
           >
             <div className="update-content">
               <span className="update-text">
-                Доступна новая версия v{updateInfo.version}
+                Доступна новая версия <span className="update-version">v{updateInfo.version}</span>
               </span>
-              <button
-                className="update-download-btn"
-                onClick={handleInstallUpdate}
-                disabled={isUpdating}
-              >
-                {isUpdating ? 'Скачивание...' : 'Установить'}
-              </button>
+              <div className="update-actions">
+                <button
+                  className="update-download-btn"
+                  onClick={handleInstallUpdate}
+                  disabled={isUpdating}
+                >
+                  {isUpdating ? 'Скачивание...' : 'Установить'}
+                </button>
+                <button
+                  className="update-close-btn"
+                  onClick={() => setUpdateDismissed(true)}
+                >
+                  <HiX />
+                </button>
+              </div>
             </div>
           </motion.div>
         )}

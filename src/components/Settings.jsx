@@ -35,9 +35,13 @@ function Settings({ onClose }) {
       setHwAccel(val);
     }).catch(() => {});
 
-    tauriApi.onUpdateProgress((progress) => {
+    const unlistenPromise = tauriApi.onUpdateProgress((progress) => {
       setDownloadProgress(progress);
     });
+
+    return () => {
+      unlistenPromise.then(unlisten => unlisten());
+    };
   }, []);
 
   const handleToggleFullStats = (checked) => {
