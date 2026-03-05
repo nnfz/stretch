@@ -212,16 +212,39 @@ fn main() {
     // Read settings before creating the webview
     let settings = read_settings();
 
-    // Build WebView2 arguments to reduce resource usage.
-    // --disable-background-timer-throttling is NOT set so that
-    // the browser CAN throttle timers when the window loses focus.
-    let mut args = vec![
-        "--autoplay-policy=no-user-gesture-required".to_string(),
-    ];
+    // Build WebView2 arguments.
+    // GPU flags MUST come first — some WebView2 builds ignore flags
+    // that follow arguments containing '='.
+    let mut args: Vec<&str> = Vec::new();
 
     if !settings.hardware_acceleration {
-        args.push("--disable-gpu".to_string());
+        // Core GPU disable
+        args.push("--disable-gpu");
+        args.push("--disable-gpu-compositing");
+        args.push("--disable-gpu-rasterization");
+
+        // Disable WARP (D3D11 software rasterizer) — without this,
+        // Chromium falls back to WARP which Task Manager still counts
+        // as GPU usage because it uses the D3D11 API.
+        args.push("--disable-software-rasterizer");
+
+        // Disable DirectComposition — Windows GPU-based compositor
+        // used for presenting frames. Falls back to GDI blitting.
+        args.push("--disable-direct-composition");
+
+        // Run GPU tasks in the main process instead of a separate
+        // GPU process, reducing process overhead.
+        args.push("--in-process-gpu");
+
+        // Disable hardware video decode/encode — the main source
+        // of GPU usage in a WebRTC streaming app.
+        args.push("--disable-accelerated-video-decode");
+        args.push("--disable-accelerated-video-encode");
+
+        args.push("--disable-features=HardwareMediaKeyHandling,MediaFoundationD3D11VideoCapture");
     }
+
+    args.push("--autoplay-policy=no-user-gesture-required");
 
     std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", args.join(" "));
 
