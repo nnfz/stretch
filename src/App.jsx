@@ -5,8 +5,9 @@ import TitleBar from './components/TitleBar';
 import Sidebar from './components/Sidebar';
 import Player from './components/Player';
 import AddStreamModal from './components/AddStreamModal';
+import useAppFocused from './hooks/useAppFocused';   
 import Settings from './components/Settings';
-import useUpdateChecker from './hooks/useUpdateChecker';
+import useUpdateChecker from './hooks/useUpdateChecker'
 import { tauriApi } from './tauriApi';
 import './App.css';
 
@@ -17,7 +18,7 @@ function App() {
     const saved = localStorage.getItem('streams');
     return saved ? JSON.parse(saved) : [];
   });
-
+  
   const [activeStreamIds, setActiveStreamIds] = useState(() => {
     try {
       const saved = localStorage.getItem('activeStreamIds');
@@ -41,6 +42,11 @@ function App() {
   const [updateDismissed, setUpdateDismissed] = useState(false);
 
   const { hasUpdate, updateInfo } = useUpdateChecker();
+  const appFocused = useAppFocused();  
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('app-blurred', !appFocused);
+  }, [appFocused]);
 
   useEffect(() => {
     let prevWidth = window.innerWidth;

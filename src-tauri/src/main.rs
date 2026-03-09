@@ -208,6 +208,48 @@ fn set_hardware_acceleration(enabled: bool) -> Result<bool, String> {
     Ok(enabled)
 }
 
+#[cfg(target_os = "windows")]
+unsafe fn set_tree_priority(priority: u32) {
+    use windows_sys::Win32::System::Threading::{
+        GetCurrentProcess, GetCurrentProcessId, OpenProcess,
+        SetPriorityClass, PROCESS_SET_INFORMATION,
+    };
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW,
+        PROCESSENTRY32W, TH32CS_SNAPPROCESS,
+    };
+    use windows_sys::Win32::Foundation::CloseHandle;
+
+    // Свой процесс
+    SetPriorityClass(GetCurrentProcess(), priority);
+
+    // Все дочерние (WebView2 GPU, renderer)
+    let pid = GetCurrentProcessId();
+    let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if snap as isize == -1 {
+        return;
+    }
+
+    let mut pe = core::mem::zeroed::<PROCESSENTRY32W>();
+    pe.dwSize = core::mem::size_of::<PROCESSENTRY32W>() as u32;
+
+    if Process32FirstW(snap, &mut pe) != 0 {
+        loop {
+            if pe.th32ParentProcessID == pid {
+                let h = OpenProcess(PROCESS_SET_INFORMATION, 0, pe.th32ProcessID);
+                if h as isize != 0 {
+                    SetPriorityClass(h, priority);
+                    CloseHandle(h);
+                }
+            }
+            if Process32NextW(snap, &mut pe) == 0 {
+                break;
+            }
+        }
+    }
+    CloseHandle(snap);
+}
+
 fn main() {
     // Read settings before creating the webview
     let settings = read_settings();
@@ -296,7 +338,20 @@ fn main() {
                     DwmExtendFrameIntoClientArea(hwnd, &margins);
                 }
             }
-
+            #[cfg(target_os = "windows")]
+            {
+                window.on_window_event(|event| {
+                    if let tauri::WindowEvent::Focused(focused) = event {
+                        unsafe {
+                            set_tree_priority(if *focused {
+                                windows_sys::Win32::System::Threading::BELOW_NORMAL_PRIORITY_CLASS
+                            } else {
+                                windows_sys::Win32::System::Threading::IDLE_PRIORITY_CLASS
+                            });
+                        }
+                    }
+                });
+            }
             Ok(())
         })
         .run(tauri::generate_context!())

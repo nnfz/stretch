@@ -392,7 +392,7 @@ function Player({ stream, onPlayerClick }) {
   useEffect(() => {
     if (status !== 'playing') return;
     // Throttle stats polling when app is in background (user is gaming)
-    const pollInterval = appFocused ? 1000 : 5000;
+    const pollInterval = appFocused ? 1000 : 30000;
     const interval = setInterval(async () => {
       const pc = getPC();
       if (!pc) return;

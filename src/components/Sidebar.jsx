@@ -1,13 +1,17 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { HiPlus, HiX, HiCog } from 'react-icons/hi';
+import { HiPlus, HiMinus, HiX, HiCog } from 'react-icons/hi';
+import useAppFocused from '../hooks/useAppFocused';  
 import { tauriApi } from '../tauriApi';
 import './Sidebar.css';
 
 function Sidebar({ streams, activeStreamIds = [], onStreamSelect, onStreamRemove, onAddStream, onOpenSettings }) {
   const [onlineStreams, setOnlineStreams] = useState({});
+  const appFocused = useAppFocused();   
 
   useEffect(() => {
+    if (!appFocused) return;
+
     const checkStatuses = async () => {
       const statuses = {};
 
@@ -28,7 +32,7 @@ function Sidebar({ streams, activeStreamIds = [], onStreamSelect, onStreamRemove
     checkStatuses();
     const interval = setInterval(checkStatuses, 10000);
     return () => clearInterval(interval);
-  }, [streams]);
+  }, [streams, appFocused]);
 
   return (
     <aside className="sidebar">
@@ -59,6 +63,16 @@ function Sidebar({ streams, activeStreamIds = [], onStreamSelect, onStreamRemove
               <div className="stream-name">{stream.name}</div>
               <div className="stream-key mono">{stream.key}</div>
             </div>
+            <button
+              className={`add-btn ${activeStreamIds.includes(stream.id) ? 'added' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onStreamSelect(stream.id, true);
+              }}
+              title={activeStreamIds.includes(stream.id) ? 'Убрать' : 'Добавить'}
+            >
+              {activeStreamIds.includes(stream.id) ? <HiMinus /> : <HiPlus />}
+            </button>
             <button
               className="remove-btn"
               onClick={(e) => {

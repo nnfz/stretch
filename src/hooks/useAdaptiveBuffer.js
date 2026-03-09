@@ -1,7 +1,7 @@
 import { useRef, useCallback, useEffect, useState } from 'react';
 
 const POLL_MS_FOCUSED = 500;
-const POLL_MS_BACKGROUND = 5000;
+const POLL_MS_BACKGROUND = 30000;
 const HINT_MIN = 0.03;
 const HINT_MAX = 1.0;
 const HINT_INITIAL = 0.03;
