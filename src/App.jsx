@@ -5,9 +5,9 @@ import TitleBar from './components/TitleBar';
 import Sidebar from './components/Sidebar';
 import Player from './components/Player';
 import AddStreamModal from './components/AddStreamModal';
-import useAppFocused from './hooks/useAppFocused';   
 import Settings from './components/Settings';
-import useUpdateChecker from './hooks/useUpdateChecker'
+import useUpdateChecker from './hooks/useUpdateChecker';
+import { useAppFocus } from './hooks/AppFocusContext';
 import { tauriApi } from './tauriApi';
 import './App.css';
 
@@ -42,7 +42,7 @@ function App() {
   const [updateDismissed, setUpdateDismissed] = useState(false);
 
   const { hasUpdate, updateInfo } = useUpdateChecker();
-  const appFocused = useAppFocused();  
+  const appFocused = useAppFocus();
 
   useEffect(() => {
     document.documentElement.classList.toggle('app-blurred', !appFocused);
@@ -124,9 +124,7 @@ function App() {
 
   const handlePlayerClick = useCallback((streamId) => {
     if (activeStreamIds.length < 2) return;
-    if (focusedStreamId === null) {
-      setFocusedStreamId(streamId);
-    } else if (focusedStreamId === streamId) {
+    if (focusedStreamId === streamId) {
       setFocusedStreamId(null);
     } else {
       setFocusedStreamId(streamId);
@@ -151,7 +149,7 @@ function App() {
     setIsUpdating(true);
     try {
       await tauriApi.downloadAndInstallUpdate(updateInfo.downloadUrl);
-    } catch (e) {
+    } catch {
       setIsUpdating(false);
     }
   }, [updateInfo, isUpdating]);
@@ -239,7 +237,6 @@ function App() {
                     };
                   }
 
-                  // Начальная позиция: центр целевого слота, нулевой размер
                   const centerLeft = parseFloat(style.left) + parseFloat(style.width) / 2;
                   const centerTop = parseFloat(style.top) + parseFloat(style.height) / 2;
 

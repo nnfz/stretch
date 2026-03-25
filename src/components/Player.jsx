@@ -3,18 +3,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { HiVolumeUp, HiVolumeOff } from 'react-icons/hi';
 import { HiArrowsPointingOut, HiArrowsPointingIn } from 'react-icons/hi2';
 import useWebRTC from '../hooks/useWebRTC';
-import useAdaptiveBuffer from '../hooks/useAdaptiveBuffer';
-import useAppFocused from '../hooks/useAppFocused';
+import useStreamStats from '../hooks/useStreamStats';
+import { useAppFocus } from '../hooks/AppFocusContext';
 import './Player.css';
 
-// === WEB AUDIO API — MediaStream подход ===
+// === WEB AUDIO API — без analyser в audio chain ===
 let globalAudioCtx = null;
 
 function getAudioContext() {
   if (!globalAudioCtx || globalAudioCtx.state === 'closed') {
     const AC = window.AudioContext || window.webkitAudioContext;
     globalAudioCtx = new AC();
-    console.log('[Audio] AudioContext created, state:', globalAudioCtx.state);
   }
   return globalAudioCtx;
 }
@@ -28,111 +27,36 @@ function ensureAudioPipeline(videoEl, streamKey) {
   if (audioNodes.has(id)) {
     const existing = audioNodes.get(id);
     if (existing.videoEl === videoEl && existing.mediaStream === videoEl.srcObject) {
-      console.log('[Audio] Pipeline exists and valid for', id);
       return existing;
     }
-    console.log('[Audio] Stream changed, rebuilding pipeline');
     destroyAudioPipeline(id);
   }
 
   const mediaStream = videoEl.srcObject;
-  if (!mediaStream) {
-    console.warn('[Audio] No srcObject on video');
-    return null;
-  }
+  if (!mediaStream) return null;
 
   const audioTracks = mediaStream.getAudioTracks();
-  console.log('[Audio] Audio tracks:', audioTracks.length, audioTracks.map(t => ({
-    id: t.id, enabled: t.enabled, muted: t.muted, readyState: t.readyState
-  })));
-
-  if (audioTracks.length === 0) {
-    console.warn('[Audio] No audio tracks in stream!');
-    return null;
-  }
+  if (audioTracks.length === 0) return null;
 
   try {
     const ctx = getAudioContext();
-
-    // Создаём отдельный MediaStream только с аудио
     const audioOnlyStream = new MediaStream(audioTracks);
     const source = ctx.createMediaStreamSource(audioOnlyStream);
-
-    console.log('[Audio] MediaStreamSource created:', {
-      numberOfOutputs: source.numberOfOutputs,
-      channelCount: source.channelCount
-    });
-
     const gainNode = ctx.createGain();
     gainNode.gain.value = 0;
 
-    // Анализатор для мониторинга
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 256;
-
-    // source -> gain -> analyser -> destination
+    // source -> gain -> destination (без analyser — экономим CPU)
     source.connect(gainNode);
-    gainNode.connect(analyser);
-    analyser.connect(ctx.destination);
+    gainNode.connect(ctx.destination);
 
-    // ВАЖНО: глушим нативный звук видео, чтобы не было двойного звука
     videoEl.muted = true;
 
-    const nodes = { ctx, source, gainNode, analyser, videoEl, mediaStream, audioOnlyStream };
+    const nodes = { ctx, source, gainNode, videoEl, mediaStream, audioOnlyStream };
     audioNodes.set(id, nodes);
-
-    startSignalMonitor(id);
-
-    console.log('[Audio] ✅ Pipeline created for', id, '(MediaStream approach)');
     return nodes;
-  } catch (e) {
-    console.error('[Audio] ❌ Pipeline failed:', e);
+  } catch {
     return null;
   }
-}
-
-function startSignalMonitor(streamKey) {
-  let checkCount = 0;
-  const maxChecks = 10;
-
-  const check = () => {
-    const n = audioNodes.get(streamKey);
-    if (!n || !n.analyser) return;
-
-    const data = new Uint8Array(n.analyser.frequencyBinCount);
-    n.analyser.getByteFrequencyData(data);
-    const sum = data.reduce((a, b) => a + b, 0);
-    const peak = Math.max(...data);
-    checkCount++;
-
-    if (checkCount <= 3 || sum === 0) {
-      console.log(`[Audio] Signal #${checkCount}: avg=${(sum/data.length).toFixed(1)} peak=${peak} gain=${n.gainNode.gain.value.toFixed(3)} ctx=${n.ctx.state} videoMuted=${n.videoEl.muted}`);
-    }
-
-    if (sum === 0 && checkCount <= 3) {
-      console.warn('[Audio] ⚠️ No signal!');
-    } else if (sum > 0 && checkCount <= 3) {
-      console.log('[Audio] ✅ Signal detected!');
-    }
-
-    if (checkCount < maxChecks) {
-      setTimeout(check, 500);
-    } else {
-      // Disconnect analyser after monitoring to reduce CPU usage.
-      // The gainNode connects directly to destination instead.
-      try {
-        if (n.gainNode && n.analyser) {
-          n.gainNode.disconnect(n.analyser);
-          n.analyser.disconnect(n.ctx.destination);
-          n.gainNode.connect(n.ctx.destination);
-          n.analyser = null;
-          console.log('[Audio] Analyser disconnected (monitoring complete)');
-        }
-      } catch (e) {}
-    }
-  };
-
-  setTimeout(check, 200);
 }
 
 function applyVolume(videoEl, streamKey, volumePercent, isMuted) {
@@ -141,17 +65,15 @@ function applyVolume(videoEl, streamKey, volumePercent, isMuted) {
   const nodes = audioNodes.get(id);
 
   if (!nodes) {
-    // Фолбэк: нативная громкость (без усиления >100%)
     videoEl.muted = isMuted;
     videoEl.volume = isMuted ? 0 : Math.min(volumePercent / 100, 1.0);
     return;
   }
 
   if (nodes.ctx.state === 'suspended') {
-    nodes.ctx.resume().catch(console.error);
+    nodes.ctx.resume().catch(() => {});
   }
 
-  // При Web Audio подходе: video MUTED (звук идёт через AudioContext)
   videoEl.muted = true;
 
   const targetGain = isMuted ? 0 : volumePercent / 100;
@@ -169,11 +91,9 @@ function destroyAudioPipeline(streamKey) {
   try {
     nodes.source.disconnect();
     nodes.gainNode.disconnect();
-    if (nodes.analyser) nodes.analyser.disconnect();
-  } catch (e) {}
+  } catch {}
 
   audioNodes.delete(id);
-  console.log('[Audio] Pipeline destroyed for', id);
 }
 
 // ==========================================
@@ -181,17 +101,9 @@ function destroyAudioPipeline(streamKey) {
 function Player({ stream, onPlayerClick }) {
   const videoRef = useRef(null);
   const playerContainerRef = useRef(null);
-  const prevBytesRef = useRef(0);
-  const prevTimestampRef = useRef(0);
-  const prevPacketsLostRef = useRef(0);
-  const prevPacketsReceivedRef = useRef(0);
   const audioInitializedRef = useRef(false);
-  const appFocused = useAppFocused();
+  const appFocused = useAppFocus();
 
-  const [stats, setStats] = useState({
-    latency: 0, jitter: 0, packetLoss: 0,
-    bitrate: 0, fps: 0, resolution: ''
-  });
   const [showControls, setShowControls] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const controlsTimeoutRef = useRef(null);
@@ -234,16 +146,13 @@ function Player({ stream, onPlayerClick }) {
     status, error, connect, disconnect, reconnect, getPC
   } = useWebRTC(videoRef, stream.key);
 
+  // === ЕДИНЫЙ хук — один getStats() вместо двух ===
   const {
-    bufferInfo, reset: resetBuffer
-  } = useAdaptiveBuffer(videoRef, getPC, status === 'playing', appFocused);
+    stats, bufferInfo, reset: resetStats
+  } = useStreamStats(videoRef, getPC, status === 'playing', appFocused);
 
   const initAudio = useCallback(() => {
-    if (!videoRef.current) return;
-    if (!videoRef.current.srcObject) {
-      console.log('[Audio] No srcObject yet, skipping init');
-      return;
-    }
+    if (!videoRef.current || !videoRef.current.srcObject) return;
 
     const nodes = ensureAudioPipeline(videoRef.current, stream.key);
     if (nodes) {
@@ -261,19 +170,15 @@ function Player({ stream, onPlayerClick }) {
     };
   }, [connect, disconnect, stream.key]);
 
-  // Когда видео начинает играть
   useEffect(() => {
     if (status !== 'playing') return;
     const videoEl = videoRef.current;
     if (!videoEl) return;
 
     const onPlaying = () => {
-      console.log('[Audio] Video playing, audioInit:', audioInitializedRef.current);
-
       if (audioInitializedRef.current) {
         applyVolume(videoEl, stream.key, volumeRef.current, mutedRef.current);
       } else {
-        // Фолбэк без Web Audio
         if (!mutedRef.current) {
           videoEl.muted = false;
           videoEl.volume = Math.min(volumeRef.current / 100, 1.0);
@@ -389,72 +294,11 @@ function Player({ stream, onPlayerClick }) {
     return () => document.removeEventListener('fullscreenchange', handler);
   }, []);
 
-  useEffect(() => {
-    if (status !== 'playing') return;
-    // Throttle stats polling when app is in background (user is gaming)
-    const pollInterval = appFocused ? 1000 : 30000;
-    const interval = setInterval(async () => {
-      const pc = getPC();
-      if (!pc) return;
-      try {
-        const rtcStats = await pc.getStats();
-        let latency = 0, jitter = 0, packetsLost = 0, packetsReceived = 0;
-        let bytesReceived = 0, timestamp = 0, fps = 0;
-        let frameWidth = 0, frameHeight = 0;
-
-        rtcStats.forEach((report) => {
-          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-            if (report.currentRoundTripTime !== undefined)
-              latency = Math.round(report.currentRoundTripTime * 1000);
-          }
-          if (report.type === 'inbound-rtp' && report.kind === 'video') {
-            if (report.jitter !== undefined) jitter = Math.round(report.jitter * 1000);
-            if (report.packetsLost !== undefined) packetsLost = report.packetsLost;
-            if (report.packetsReceived !== undefined) packetsReceived = report.packetsReceived;
-            if (report.bytesReceived !== undefined) {
-              bytesReceived = report.bytesReceived;
-              timestamp = report.timestamp;
-            }
-            if (report.framesPerSecond !== undefined) fps = Math.round(report.framesPerSecond);
-            if (report.frameWidth) frameWidth = report.frameWidth;
-            if (report.frameHeight) frameHeight = report.frameHeight;
-          }
-        });
-
-        let bitrate = 0;
-        if (prevBytesRef.current > 0 && prevTimestampRef.current > 0) {
-          const db = bytesReceived - prevBytesRef.current;
-          const dt = (timestamp - prevTimestampRef.current) / 1000;
-          if (dt > 0) bitrate = Math.round((db * 8) / dt / 1000);
-        }
-        prevBytesRef.current = bytesReceived;
-        prevTimestampRef.current = timestamp;
-
-        let packetLoss = 0;
-        const dL = packetsLost - prevPacketsLostRef.current;
-        const dR = packetsReceived - prevPacketsReceivedRef.current;
-        if (dR + dL > 0) packetLoss = Math.round((dL / (dR + dL)) * 1000) / 10;
-        prevPacketsLostRef.current = packetsLost;
-        prevPacketsReceivedRef.current = packetsReceived;
-
-        let resolution = '';
-        if (frameWidth && frameHeight) resolution = `${frameWidth}×${frameHeight}`;
-
-        setStats({
-          latency, jitter,
-          packetLoss: Math.max(0, packetLoss),
-          bitrate, fps, resolution
-        });
-      } catch (err) {}
-    }, pollInterval);
-    return () => clearInterval(interval);
-  }, [status, getPC, appFocused]);
-
   const toggleFullscreen = useCallback((e) => {
     e?.stopPropagation();
     if (!playerContainerRef.current) return;
     if (!document.fullscreenElement) {
-      playerContainerRef.current.requestFullscreen().catch(console.error);
+      playerContainerRef.current.requestFullscreen().catch(() => {});
     } else {
       document.exitFullscreen();
     }
@@ -462,11 +306,11 @@ function Player({ stream, onPlayerClick }) {
 
   const handleReconnect = useCallback((e) => {
     e?.stopPropagation();
-    resetBuffer();
+    resetStats();
     destroyAudioPipeline(stream.key);
     audioInitializedRef.current = false;
     reconnect();
-  }, [resetBuffer, reconnect, stream.key]);
+  }, [resetStats, reconnect, stream.key]);
 
   const getStatusInfo = () => {
     switch (status) {

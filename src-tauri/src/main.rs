@@ -137,7 +137,7 @@ fn shell_execute(path: &std::path::Path, args: &str) -> Result<(), String> {
             file.as_ptr(),
             params.as_ptr(),
             std::ptr::null(),
-            0, // SW_HIDE
+            0,
         )
     };
 
@@ -220,10 +220,8 @@ unsafe fn set_tree_priority(priority: u32) {
     };
     use windows_sys::Win32::Foundation::CloseHandle;
 
-    // Свой процесс
     SetPriorityClass(GetCurrentProcess(), priority);
 
-    // Все дочерние (WebView2 GPU, renderer)
     let pid = GetCurrentProcessId();
     let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if snap as isize == -1 {
@@ -251,39 +249,35 @@ unsafe fn set_tree_priority(priority: u32) {
 }
 
 fn main() {
-    // Read settings before creating the webview
     let settings = read_settings();
 
-    // Build WebView2 arguments.
-    // GPU flags MUST come first — some WebView2 builds ignore flags
-    // that follow arguments containing '='.
     let mut args: Vec<&str> = Vec::new();
 
     if !settings.hardware_acceleration {
-        // Core GPU disable
         args.push("--disable-gpu");
         args.push("--disable-gpu-compositing");
         args.push("--disable-gpu-rasterization");
-
-        // Disable WARP (D3D11 software rasterizer) — without this,
-        // Chromium falls back to WARP which Task Manager still counts
-        // as GPU usage because it uses the D3D11 API.
         args.push("--disable-software-rasterizer");
-
-        // Disable DirectComposition — Windows GPU-based compositor
-        // used for presenting frames. Falls back to GDI blitting.
         args.push("--disable-direct-composition");
-
-        // Run GPU tasks in the main process instead of a separate
-        // GPU process, reducing process overhead.
         args.push("--in-process-gpu");
-
-        // Disable hardware video decode/encode — the main source
-        // of GPU usage in a WebRTC streaming app.
         args.push("--disable-accelerated-video-decode");
         args.push("--disable-accelerated-video-encode");
-
         args.push("--disable-features=HardwareMediaKeyHandling,MediaFoundationD3D11VideoCapture");
+    } else {
+        // === GPU ON но снижаем оверхед от UI рендеринга ===
+        // CSS/DOM рисуется на CPU (текст, кнопки — CPU справится),
+        // а GPU занимается ТОЛЬКО видео декодом
+        args.push("--disable-gpu-rasterization");
+
+        // 1 поток растеризации — UI простой, больше не нужно
+        args.push("--num-raster-threads=1");
+
+        // Убираем GPU compositing для анимаций/пер��ходов —
+        // композитинг на CPU для нашего простого UI не проблема,
+        // зато GPU освобождается от обработки десятков слоёв
+        args.push("--disable-gpu-compositing");
+
+        // Видео декод остаётся на GPU (не добавляем --disable-accelerated-video-decode)
     }
 
     args.push("--autoplay-policy=no-user-gesture-required");
@@ -307,8 +301,6 @@ fn main() {
             let window = app.get_webview_window("main").unwrap();
             window.set_decorations(false)?;
 
-            // Set process priority to below-normal so we don't steal
-            // CPU time from games running in the foreground.
             #[cfg(target_os = "windows")]
             {
                 use windows_sys::Win32::System::Threading::{
@@ -319,9 +311,6 @@ fn main() {
                 }
             }
 
-            // Fix Windows 10 frameless window border when maximized.
-            // DwmExtendFrameIntoClientArea with -1 margins removes the
-            // visible 1px "classic" border that appears on Win10 without Aero.
             #[cfg(target_os = "windows")]
             {
                 use windows_sys::Win32::Graphics::Dwm::DwmExtendFrameIntoClientArea;
@@ -338,6 +327,7 @@ fn main() {
                     DwmExtendFrameIntoClientArea(hwnd, &margins);
                 }
             }
+
             #[cfg(target_os = "windows")]
             {
                 window.on_window_event(|event| {

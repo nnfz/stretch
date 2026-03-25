@@ -1,3 +1,4 @@
+/* src/index.css */
 * {
   margin: 0;
   padding: 0;
@@ -83,8 +84,6 @@ video {
 html.app-blurred *,
 html.app-blurred *::before,
 html.app-blurred *::after {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
   animation: none !important;
   transition: none !important;
 }

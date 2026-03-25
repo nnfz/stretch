@@ -1,10 +1,5 @@
 import { useState, useEffect } from 'react';
 
-/**
- * Returns true when the app window is visible and focused.
- * When the user is in a game (app in background), returns false
- * so we can throttle expensive timers and reduce CPU/GPU load.
- */
 export default function useAppFocused() {
   const [focused, setFocused] = useState(
     () => document.visibilityState === 'visible' && document.hasFocus()
