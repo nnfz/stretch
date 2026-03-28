@@ -1,5 +1,5 @@
 .titlebar {
-  --height : 2.5rem;
+  --height : 2rem;
   height: var(--height);
   background: var(--titlebg);
   border-bottom: 1px solid var(--border);
@@ -23,7 +23,7 @@
 
 .sidebar-toggle-btn {
   height: var(--height);
-  width: 2.5rem;
+  width: 2rem;
   background: transparent;
   border: none;
   color: var(--muted);
@@ -73,7 +73,7 @@
   transition: all var(--transition-fast);
   color: var(--muted);
   pointer-events: auto;
-  width: 2.5rem;
+  width: 2rem;
   height: var(--height);
   font-size: 1rem;
   -webkit-app-region: no-drag;

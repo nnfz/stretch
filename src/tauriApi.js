@@ -28,6 +28,16 @@ export const tauriApi = {
     return win.isMaximized();
   },
 
+  setAlwaysOnTop: async (pinned) => {
+    const window = getCurrentWindow();
+    await window.setAlwaysOnTop(pinned);
+  },
+
+  isAlwaysOnTop: async () => {
+    const window = getCurrentWindow();
+    return await window.isAlwaysOnTop();
+  },
+  
   onMaximizeChange: async (callback) => {
     const win = getCurrentWindow();
     await win.listen('tauri://resize', async () => {

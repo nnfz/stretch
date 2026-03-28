@@ -2,12 +2,13 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HiVolumeUp, HiVolumeOff } from 'react-icons/hi';
 import { HiArrowsPointingOut, HiArrowsPointingIn } from 'react-icons/hi2';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import useWebRTC from '../hooks/useWebRTC';
 import useStreamStats from '../hooks/useStreamStats';
 import { useAppFocus } from '../hooks/AppFocusContext';
 import './Player.css';
 
-// === WEB AUDIO API — без analyser в audio chain ===
+// === WEB AUDIO API ===
 let globalAudioCtx = null;
 
 function getAudioContext() {
@@ -45,7 +46,6 @@ function ensureAudioPipeline(videoEl, streamKey) {
     const gainNode = ctx.createGain();
     gainNode.gain.value = 0;
 
-    // source -> gain -> destination (без analyser — экономим CPU)
     source.connect(gainNode);
     gainNode.connect(ctx.destination);
 
@@ -98,10 +98,12 @@ function destroyAudioPipeline(streamKey) {
 
 // ==========================================
 
-function Player({ stream, onPlayerClick }) {
+function Player({ stream, isPinned, onPlayerClick }) {               // ← isPinned проп
   const videoRef = useRef(null);
   const playerContainerRef = useRef(null);
   const audioInitializedRef = useRef(false);
+  const wasMaximizedRef = useRef(false);
+  const wasPinnedRef = useRef(false);
   const appFocused = useAppFocus();
 
   const [showControls, setShowControls] = useState(true);
@@ -109,7 +111,6 @@ function Player({ stream, onPlayerClick }) {
   const controlsTimeoutRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const sliderRef = useRef(null);
-  const fsSliderRef = useRef(null);
   const previousVolumeRef = useRef(100);
 
   const [showFullStats, setShowFullStats] = useState(() => {
@@ -142,11 +143,14 @@ function Player({ stream, onPlayerClick }) {
   useEffect(() => { volumeRef.current = volume; }, [volume]);
   useEffect(() => { mutedRef.current = isMuted; }, [isMuted]);
 
+  // Храним актуальное значение isPinned в ref для использования в toggleFullscreen
+  const isPinnedRef = useRef(isPinned);
+  useEffect(() => { isPinnedRef.current = isPinned; }, [isPinned]);
+
   const {
     status, error, connect, disconnect, reconnect, getPC
   } = useWebRTC(videoRef, stream.key);
 
-  // === ЕДИНЫЙ хук — один getStats() вместо двух ===
   const {
     stats, bufferInfo, reset: resetStats
   } = useStreamStats(videoRef, getPC, status === 'playing', appFocused);
@@ -277,27 +281,79 @@ function Player({ stream, onPlayerClick }) {
     setShowControls(true);
     if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
     controlsTimeoutRef.current = setTimeout(() => {
-      if (document.fullscreenElement) setShowControls(false);
+      setShowControls(false);
     }, 2500);
   }, []);
 
   useEffect(() => {
-    const handler = () => {
+    const handler = async () => {
       const active = !!document.fullscreenElement;
       setIsFullscreen(active);
+      setShowControls(true);
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+      controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 2500);
+
       if (!active) {
-        setShowControls(true);
-        if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+        try {
+          const appWindow = getCurrentWindow();
+          await new Promise(r => setTimeout(r, 50));
+
+          if (wasPinnedRef.current) {
+            wasPinnedRef.current = false;
+            await appWindow.setAlwaysOnTop(true);
+          }
+
+          if (wasMaximizedRef.current) {
+            wasMaximizedRef.current = false;
+            await appWindow.maximize();
+          }
+        } catch {}
       }
     };
     document.addEventListener('fullscreenchange', handler);
     return () => document.removeEventListener('fullscreenchange', handler);
   }, []);
 
-  const toggleFullscreen = useCallback((e) => {
+  useEffect(() => {
+    if (status === 'playing') {
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+      controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 3000);
+    }
+    return () => {
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    };
+  }, [status]);
+
+  const toggleFullscreen = useCallback(async (e) => {
     e?.stopPropagation();
     if (!playerContainerRef.current) return;
+
     if (!document.fullscreenElement) {
+      try {
+        const appWindow = getCurrentWindow();
+        let needWait = false;
+
+        // Используем проп через ref — никаких запросов к API
+        if (isPinnedRef.current) {
+          wasPinnedRef.current = true;
+          await appWindow.setAlwaysOnTop(false);
+          needWait = true;
+        }
+
+        const maximized = await appWindow.isMaximized();
+        if (maximized) {
+          wasMaximizedRef.current = true;
+          await appWindow.unmaximize();
+          needWait = true;
+        }
+
+        if (needWait) {
+          await new Promise(r => setTimeout(r, 150));
+        }
+      } catch (err) {
+        console.error('Pre-fullscreen error:', err);
+      }
+
       playerContainerRef.current.requestFullscreen().catch(() => {});
     } else {
       document.exitFullscreen();
@@ -360,7 +416,7 @@ function Player({ stream, onPlayerClick }) {
 
   const renderVolumeSlider = (ref, className) => {
     const isBoosted = volume > 100;
-    
+
     return (
       <div className="volume-wrapper">
         <AnimatePresence>
@@ -396,13 +452,13 @@ function Player({ stream, onPlayerClick }) {
     );
   };
 
-  const renderStats = (isFS) => {
+  const renderStats = () => {
     if (status !== 'playing') return null;
-    const sep = <span className={isFS ? 'fs-stats-separator' : 'stat-separator'}>•</span>;
+    const sep = <span className="fs-stats-separator">•</span>;
 
     if (!showFullStats) {
       return (
-        <div className={isFS ? 'fs-stats mono' : 'stream-stats'}>
+        <div className="fs-stats mono">
           <span className="stat-item mono">
             <span className="stat-label">Пинг</span>
             <span className="stat-value">{stats.latency}ms</span>
@@ -423,7 +479,7 @@ function Player({ stream, onPlayerClick }) {
     }
 
     return (
-      <div className={isFS ? 'fs-stats mono' : 'stream-stats'}>
+      <div className="fs-stats mono">
         <span className="stat-item mono"><span className="stat-label">Пинг</span><span className="stat-value">{stats.latency}ms</span></span>
         {sep}
         <span className="stat-item mono"><span className="stat-label">Джиттер</span><span className="stat-value">{stats.jitter}ms</span></span>
@@ -461,15 +517,25 @@ function Player({ stream, onPlayerClick }) {
   return (
     <motion.div
       ref={playerContainerRef}
-      className={`player ${isFullscreen ? 'is-fullscreen' : ''}`}
+      className={`player ${isFullscreen ? 'is-fullscreen' : ''} ${!showControls && status === 'playing' ? 'controls-hidden' : ''}`}
       onMouseMove={handleMouseMove}
+      onMouseLeave={() => {
+        if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+        controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 1000);
+      }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
     >
       <div className="video-container" onClick={!isFullscreen && onPlayerClick ? onPlayerClick : undefined}>
-        <video ref={videoRef} autoPlay playsInline muted className="video-element" style={{ cursor: onPlayerClick && !isFullscreen ? 'pointer' : 'default' }} />
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className={`video-element ${onPlayerClick && !isFullscreen ? 'clickable' : ''}`}
+        />
 
         {showFullStats && status === 'playing' && bufferInfo.hasData && (
           <div className="buffer-health-bar">
@@ -498,41 +564,36 @@ function Player({ stream, onPlayerClick }) {
         )}
 
         <AnimatePresence>
-          {isFullscreen && showControls && (
-            <motion.div className="fullscreen-ui" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={(e) => e.stopPropagation()}>
+          {showControls && status === 'playing' && (
+            <motion.div
+              className="fullscreen-ui"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="fs-top-bar">
                 <div className="fs-stream-info">
                   <span className="fs-name">{stream.name}</span>
-                  {renderStats(true)}
+                  {renderStats()}
                 </div>
               </div>
               <div className="fs-bottom-bar">
                 <div className="fs-controls-right">
                   <div className="fs-controls-group">
                     <button className="fs-btn" onClick={toggleMute}>{getVolumeIcon()}</button>
-                    {renderVolumeSlider(fsSliderRef, 'fs-slider')}
+                    {renderVolumeSlider(sliderRef, 'fs-slider')}
                   </div>
-                  <button className="fs-btn fs-exit-btn" onClick={toggleFullscreen}><HiArrowsPointingIn /></button>
+                  <button className="fs-btn fs-exit-btn" onClick={toggleFullscreen}>
+                    {isFullscreen ? <HiArrowsPointingIn /> : <HiArrowsPointingOut />}
+                  </button>
                 </div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
-
-      {!isFullscreen && (
-        <div className="controls">
-          <div className="controls-left">
-            <div className={`status-badge ${statusInfo.color}`}><div className="status-dot" />{statusInfo.text}</div>
-            {renderStats(false)}
-          </div>
-          <div className="controls-right">
-            <button className={`control-btn ${isMuted ? 'muted' : ''}`} onClick={toggleMute}>{getVolumeIcon()}</button>
-            {renderVolumeSlider(sliderRef, 'slider')}
-            <button className="control-btn" onClick={toggleFullscreen}><HiArrowsPointingOut /></button>
-          </div>
-        </div>
-      )}
     </motion.div>
   );
 }

@@ -34,6 +34,7 @@ function App() {
   const [focusedStreamId, setFocusedStreamId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [isPinned, setIsPinned] = useState(false);                    // ← ДОБАВЛЕНО
   const [isSidebarVisible, setIsSidebarVisible] = useState(() => {
     return window.innerWidth >= SIDEBAR_BREAKPOINT;
   });
@@ -169,7 +170,10 @@ function App() {
 
   return (
     <div className="app">
-      <TitleBar onToggleSidebar={toggleSidebar} />
+      <TitleBar
+        onToggleSidebar={toggleSidebar}
+        onPinChange={setIsPinned}
+      />
       <div className="app-body">
         <AnimatePresence initial={false}>
           {isSidebarVisible && (
@@ -273,10 +277,11 @@ function App() {
                         pointerEvents: isHidden ? 'none' : 'auto',
                       }}
                     >
-                      <Player
-                        stream={stream}
-                        onPlayerClick={count >= 2 ? () => handlePlayerClick(stream.id) : undefined}
-                      />
+                    <Player
+                      stream={stream}
+                      isPinned={isPinned}
+                      onPlayerClick={count >= 2 ? () => handlePlayerClick(stream.id) : undefined}
+                    />
                     </motion.div>
                   );
                 })}
