@@ -34,6 +34,16 @@ export default function useStreamStats(videoRef, getPC, isActive, appFocused = t
   const sm = useRef({ level: -1, target: -1 });
   const everHadJB = useRef(false);
   const hintRef = useRef(HINT_INITIAL);
+  const pollingRef = useRef(false);
+  const lastStatsRef = useRef(null);
+  const lastBufferInfoRef = useRef(null);
+
+  const updateIfChanged = (setter, lastRef, next) => {
+    const previous = lastRef.current;
+    if (previous && Object.keys(next).every(key => previous[key] === next[key])) return;
+    lastRef.current = next;
+    setter(next);
+  };
 
   useEffect(() => {
     if (!isActive) return;
@@ -45,18 +55,21 @@ export default function useStreamStats(videoRef, getPC, isActive, appFocused = t
     };
     video?.addEventListener('waiting', onWaiting);
 
+    let cancelled = false;
     const pollMs = appFocused ? POLL_FOCUSED : POLL_BACKGROUND;
 
     const tick = async () => {
+      if (pollingRef.current) return;
       const pc = getPC?.();
       if (!pc) return;
-
       try {
         if (pc.connectionState === 'closed' || pc.connectionState === 'failed') return;
       } catch { return; }
 
+      pollingRef.current = true;
       try {
         const raw = await pc.getStats();
+        if (cancelled || pc !== getPC?.()) return;
         const now = Date.now();
 
         let latency = 0, videoJitter = 0;
@@ -123,7 +136,7 @@ export default function useStreamStats(videoRef, getPC, isActive, appFocused = t
         let resolution = '';
         if (frameWidth && frameHeight) resolution = `${frameWidth}×${frameHeight}`;
 
-        setStats({
+        updateIfChanged(setStats, lastStatsRef, {
           latency, jitter: videoJitter,
           packetLoss: Math.max(0, packetLoss),
           bitrate, fps, resolution,
@@ -240,20 +253,23 @@ export default function useStreamStats(videoRef, getPC, isActive, appFocused = t
           dropped: framesDropped, pktLost: rtpPktLost, pktRecv: rtpPktRecv, ts: now,
         };
 
-        setBufferInfo({
+        updateIfChanged(setBufferInfo, lastBufferInfoRef, {
           level: levelMs, target: targetMs, health,
           stalls: totalStalls, dropped: framesDropped, droppedRate,
           nackCount, pliCount,
           delayHint: Math.round(hint * 1000),
           hasData: hasJBData || everHadJB.current,
         });
-      } catch {}
+      } catch {} finally {
+        pollingRef.current = false;
+      }
     };
 
     const id = setInterval(tick, pollMs);
     const firstTick = setTimeout(tick, 300);
 
     return () => {
+      cancelled = true;
       clearInterval(id);
       clearTimeout(firstTick);
       video?.removeEventListener('waiting', onWaiting);
@@ -280,6 +296,8 @@ export default function useStreamStats(videoRef, getPC, isActive, appFocused = t
       stalls: 0, dropped: 0, droppedRate: 0,
       nackCount: 0, pliCount: 0, delayHint: 30, hasData: false,
     });
+    lastStatsRef.current = null;
+    lastBufferInfoRef.current = null;
   }, []);
 
   const skipToLive = useCallback(() => {

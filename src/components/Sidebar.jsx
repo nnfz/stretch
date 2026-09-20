@@ -1,37 +1,54 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { HiPlus, HiMinus, HiX, HiCog } from 'react-icons/hi';
-import useAppFocused from '../hooks/useAppFocused';  
 import { tauriApi } from '../tauriApi';
 import './Sidebar.css';
 
-function Sidebar({ streams, activeStreamIds = [], onStreamSelect, onStreamRemove, onAddStream, onOpenSettings }) {
+function Sidebar({ streams, activeStreamIds = [], appFocused, onStreamSelect, onStreamRemove, onAddStream, onOpenSettings }) {
   const [onlineStreams, setOnlineStreams] = useState({});
-  const appFocused = useAppFocused();   
+  const pendingCheckRef = useRef(null);
 
   useEffect(() => {
     if (!appFocused) return;
 
+    let cancelled = false;
+    let timer;
     const checkStatuses = async () => {
+      // Finish the previous effect's request before starting a new batch.
+      await pendingCheckRef.current;
+      if (cancelled || streams.length === 0) return;
       const statuses = {};
-
-      await Promise.all(
-        streams.map(async (stream) => {
+      const serverUrl = localStorage.getItem('serverUrl') || 'https://stream.nnfz.ru';
+      let nextIndex = 0;
+      const worker = async () => {
+        while (!cancelled && nextIndex < streams.length) {
+          const stream = streams[nextIndex++];
           try {
-            const serverUrl = localStorage.getItem('serverUrl') || 'https://stream.nnfz.ru';
-            const url = `${serverUrl}/live/${stream.key}.m3u8`;
+            const url = serverUrl + '/live/' + stream.key + '.m3u8';
             statuses[stream.id] = await tauriApi.checkStreamLive(url);
-          } catch (e) {
+          } catch {
             statuses[stream.id] = false;
           }
-        })
-      );
-      setOnlineStreams(statuses);
+        }
+      };
+      const pending = Promise.all(Array.from({ length: Math.min(4, streams.length) }, worker));
+      pendingCheckRef.current = pending;
+      await pending;
+      if (pendingCheckRef.current === pending) pendingCheckRef.current = null;
+      if (cancelled) return;
+      setOnlineStreams(previous => {
+        const keys = Object.keys(statuses);
+        return keys.length === Object.keys(previous).length &&
+          keys.every(key => previous[key] === statuses[key]) ? previous : statuses;
+      });
+      timer = setTimeout(checkStatuses, 10000);
     };
 
     checkStatuses();
-    const interval = setInterval(checkStatuses, 10000);
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [streams, appFocused]);
 
   return (

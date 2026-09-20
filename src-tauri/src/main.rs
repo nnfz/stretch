@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::Emitter;
+use tauri::{Emitter, State};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -8,6 +8,10 @@ use std::path::PathBuf;
 struct AppSettings {
     #[serde(default = "default_true")]
     hardware_acceleration: bool,
+}
+
+struct AppState {
+    http: reqwest::Client,
 }
 
 impl Default for AppSettings {
@@ -67,14 +71,10 @@ fn close_window(window: tauri::Window) {
 }
 
 #[tauri::command]
-async fn whep_request(url: String, sdp: String) -> Result<String, String> {
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::limited(10))
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    let response = client
+async fn whep_request(state: State<'_, AppState>, url: String, sdp: String) -> Result<String, String> {
+    let response = state.http
         .post(&url)
+        .timeout(std::time::Duration::from_secs(15))
         .header("Content-Type", "application/sdp")
         .body(sdp)
         .send()
@@ -89,20 +89,24 @@ async fn whep_request(url: String, sdp: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn check_stream_live(url: String) -> Result<bool, String> {
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::limited(5))
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    let response = client
+async fn check_stream_live(state: State<'_, AppState>, url: String) -> Result<bool, String> {
+    let mut response = state.http
         .get(&url)
+        .timeout(std::time::Duration::from_secs(8))
         .header("Range", "bytes=0-0")
         .send()
         .await
         .map_err(|_| "fetch failed".to_string())?;
 
-    Ok(response.status().as_u16() != 404)
+    let live = response.status().as_u16() != 404;
+    // Drain small playlist responses so their connections can return to the pool.
+    // Stop if a server ignores Range and responds with a large or endless body.
+    let mut received = 0;
+    while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+        received += chunk.len();
+        if received > 64 * 1024 { break; }
+    }
+    Ok(live)
 }
 
 #[cfg(target_os = "windows")]
@@ -150,6 +154,7 @@ fn shell_execute(path: &std::path::Path, args: &str) -> Result<(), String> {
 
 #[tauri::command]
 async fn download_and_install_update(
+    state: State<'_, AppState>,
     url: String,
     window: tauri::Window,
 ) -> Result<bool, String> {
@@ -159,12 +164,7 @@ async fn download_and_install_update(
     let temp_dir = std::env::temp_dir();
     let temp_path = temp_dir.join("stretch-update.exe");
 
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::limited(10))
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    let response = client
+    let response = state.http
         .get(&url)
         .send()
         .await
@@ -263,28 +263,20 @@ fn main() {
         args.push("--disable-accelerated-video-decode");
         args.push("--disable-accelerated-video-encode");
         args.push("--disable-features=HardwareMediaKeyHandling,MediaFoundationD3D11VideoCapture");
-    } else {
-        // === GPU ON но снижаем оверхед от UI рендеринга ===
-        // CSS/DOM рисуется на CPU (текст, кнопки — CPU справится),
-        // а GPU занимается ТОЛЬКО видео декодом
-        args.push("--disable-gpu-rasterization");
-
-        // 1 поток растеризации — UI простой, больше не нужно
-        args.push("--num-raster-threads=1");
-
-        // Убираем GPU compositing для анимаций/пер��ходов —
-        // композитинг на CPU для нашего простого UI не проблема,
-        // зато GPU освобождается от обработки десятков слоёв
-        args.push("--disable-gpu-compositing");
-
-        // Видео декод остаётся на GPU (не добавляем --disable-accelerated-video-decode)
     }
 
     args.push("--autoplay-policy=no-user-gesture-required");
 
     std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", args.join(" "));
 
+    let http = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .build()
+        .expect("failed to build HTTP client");
+
     tauri::Builder::default()
+        .manage(AppState { http })
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             minimize_window,

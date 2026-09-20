@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { HiX } from 'react-icons/hi';
-import './AddStreamModal.css';
+import './Modal.css';
 
 function AddStreamModal({ onClose, onAdd }) {
   const [streamKey, setStreamKey] = useState('');

@@ -1,15 +1,16 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HiX } from 'react-icons/hi';
 import TitleBar from './components/TitleBar';
 import Sidebar from './components/Sidebar';
 import Player from './components/Player';
-import AddStreamModal from './components/AddStreamModal';
-import Settings from './components/Settings';
 import useUpdateChecker from './hooks/useUpdateChecker';
 import { useAppFocus } from './hooks/AppFocusContext';
 import { tauriApi } from './tauriApi';
 import './App.css';
+
+const AddStreamModal = lazy(() => import('./components/AddStreamModal'));
+const Settings = lazy(() => import('./components/Settings'));
 
 const SIDEBAR_BREAKPOINT = 1030;
 
@@ -187,6 +188,7 @@ function App() {
               <Sidebar
                 streams={streams}
                 activeStreamIds={activeStreamIds}
+                appFocused={appFocused}
                 onStreamSelect={setActive}
                 onStreamRemove={removeStream}
                 onAddStream={() => setShowAddModal(true)}
@@ -305,15 +307,19 @@ function App() {
       </div>
       <AnimatePresence>
         {showAddModal && (
-          <AddStreamModal
-            onClose={() => setShowAddModal(false)}
-            onAdd={addStream}
-          />
+          <Suspense fallback={null}>
+            <AddStreamModal
+              onClose={() => setShowAddModal(false)}
+              onAdd={addStream}
+            />
+          </Suspense>
         )}
       </AnimatePresence>
       <AnimatePresence>
         {showSettings && (
-          <Settings onClose={() => setShowSettings(false)} />
+          <Suspense fallback={null}>
+            <Settings onClose={() => setShowSettings(false)} />
+          </Suspense>
         )}
       </AnimatePresence>
       <AnimatePresence>

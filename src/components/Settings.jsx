@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { HiX, HiCheck, HiDownload, HiExclamation } from 'react-icons/hi';
 import { tauriApi } from '../tauriApi';
+import './Modal.css';
 import './Settings.css';
 
 function Settings({ onClose }) {

@@ -8,6 +8,11 @@ const getServerUrl = () => {
 function enableAudioNack(sdp) {
   const lines = sdp.split('\r\n');
   const result = [];
+  const nackPayloadTypes = new Set(
+    lines
+      .filter(line => line.startsWith('a=rtcp-fb:') && / nack(?: |$)/.test(line))
+      .map(line => line.slice('a=rtcp-fb:'.length).split(' ')[0])
+  );
   let inAudio = false;
 
   for (let i = 0; i < lines.length; i++) {
@@ -28,12 +33,9 @@ function enableAudioNack(sdp) {
     if (inAudio && line.startsWith('a=rtpmap:')) {
       const pt = line.split(':')[1]?.split(' ')[0];
       if (pt) {
-        const hasNack = lines.some(l =>
-          l === `a=rtcp-fb:${pt} nack` ||
-          l === `a=rtcp-fb:${pt} nack `
-        );
-        if (!hasNack) {
+        if (!nackPayloadTypes.has(pt)) {
           result.push(`a=rtcp-fb:${pt} nack`);
+          nackPayloadTypes.add(pt);
         }
       }
     }
@@ -52,10 +54,13 @@ function useWebRTC(videoRef, streamKey) {
   const checkTimerRef = useRef(null);
   const isConnectingRef = useRef(false);
   const playPromiseRef = useRef(null);
+  const generationRef = useRef(0);
 
   const CHECK_INTERVAL = 5000;
 
   const cleanup = useCallback(() => {
+    generationRef.current++;
+    playPromiseRef.current = null;
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
@@ -65,6 +70,8 @@ function useWebRTC(videoRef, streamKey) {
       checkTimerRef.current = null;
     }
     if (pcRef.current) {
+      pcRef.current.ontrack = null;
+      pcRef.current.onconnectionstatechange = null;
       pcRef.current.close();
       pcRef.current = null;
     }
@@ -75,20 +82,23 @@ function useWebRTC(videoRef, streamKey) {
   }, [videoRef]);
 
   const safePlay = useCallback(async () => {
-    if (!videoRef.current) return;
+    const video = videoRef.current;
+    if (!video || playPromiseRef.current) return;
+    const generation = generationRef.current;
     try {
-      if (playPromiseRef.current) return;
-      playPromiseRef.current = videoRef.current.play();
+      playPromiseRef.current = video.play();
       await playPromiseRef.current;
-      playPromiseRef.current = null;
+      if (generation !== generationRef.current) return;
       setStatus('playing');
     } catch (err) {
-      playPromiseRef.current = null;
+      if (generation !== generationRef.current) return;
       if (err.name === 'NotAllowedError') {
         setStatus('playing');
       } else if (err.name !== 'AbortError') {
         console.error('Play error:', err);
       }
+    } finally {
+      if (generation === generationRef.current) playPromiseRef.current = null;
     }
   }, [videoRef]);
 
@@ -96,6 +106,8 @@ function useWebRTC(videoRef, streamKey) {
     if (isConnectingRef.current) return;
 
     cleanup();
+    const generation = generationRef.current;
+    const isCurrent = () => generation === generationRef.current;
     isConnectingRef.current = true;
     setStatus('connecting');
     setError(null);
@@ -113,6 +125,7 @@ function useWebRTC(videoRef, streamKey) {
       pc.addTransceiver('audio', { direction: 'recvonly' });
 
       pc.ontrack = (event) => {
+        if (!isCurrent()) return;
         if (videoRef.current && event.streams[0]) {
           if (videoRef.current.srcObject !== event.streams[0]) {
             videoRef.current.srcObject = event.streams[0];
@@ -122,35 +135,56 @@ function useWebRTC(videoRef, streamKey) {
       };
 
       pc.onconnectionstatechange = () => {
-        if (!pc) return;
+        if (!isCurrent()) return;
         const state = pc.connectionState;
-        if (state === 'failed' || state === 'disconnected') {
+        if (state === 'connected') {
+          clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = null;
+          safePlay();
+        } else if (state === 'failed' || state === 'disconnected') {
           setStatus('error');
           setError('Соединение потеряно');
-          reconnectTimerRef.current = setTimeout(() => connect(), 3000);
+          if (reconnectTimerRef.current) return;
+          reconnectTimerRef.current = setTimeout(() => {
+            reconnectTimerRef.current = null;
+            if (!isCurrent()) return;
+            // An unfinished signaling request must not block recovery.
+            cleanup();
+            connect();
+          }, 3000);
         }
       };
 
       const offer = await pc.createOffer();
+      if (!isCurrent()) return;
       const enhancedSDP = enableAudioNack(offer.sdp);
 
       await pc.setLocalDescription({ type: 'offer', sdp: enhancedSDP });
+      if (!isCurrent()) return;
 
       const serverUrl = getServerUrl();
       const whepUrl = `${serverUrl}/rtc/v1/whep/?app=live&stream=${streamKey}`;
       const answerSDP = await tauriApi.whepRequest(whepUrl, enhancedSDP);
+      if (!isCurrent()) return;
 
       await pc.setRemoteDescription(
         new RTCSessionDescription({ type: 'answer', sdp: answerSDP })
       );
 
+      if (!isCurrent()) return;
       isConnectingRef.current = false;
     } catch (err) {
+      if (!isCurrent()) return;
+      cleanup();
+      const retryGeneration = generationRef.current;
       console.error('WebRTC error:', err);
       setStatus('offline');
       setError(err.message || 'Не удалось подключиться');
       isConnectingRef.current = false;
-      checkTimerRef.current = setTimeout(() => connect(), CHECK_INTERVAL);
+      checkTimerRef.current = setTimeout(() => {
+        checkTimerRef.current = null;
+        if (generationRef.current === retryGeneration) connect();
+      }, CHECK_INTERVAL);
     }
   }, [videoRef, streamKey, cleanup, safePlay]);
 
@@ -163,7 +197,11 @@ function useWebRTC(videoRef, streamKey) {
 
   const reconnect = useCallback(() => {
     disconnect();
-    setTimeout(() => connect(), 100);
+    const generation = generationRef.current;
+    reconnectTimerRef.current = setTimeout(() => {
+      reconnectTimerRef.current = null;
+      if (generation === generationRef.current) connect();
+    }, 100);
   }, [disconnect, connect]);
 
   const getPC = useCallback(() => pcRef.current, []);
